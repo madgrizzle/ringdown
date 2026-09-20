@@ -5,6 +5,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../models/filters.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
+import '../providers/update_provider.dart';
 import '../services/api_client.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -185,6 +186,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ListTile(
             title: const Text('App version'),
             subtitle: Text(_version.isEmpty ? '…' : _version),
+          ),
+          ListTile(
+            title: const Text('Check for updates'),
+            subtitle: const Text(
+              'Android opens the Play Store or an in-app update. iOS opens TestFlight.',
+            ),
+            onTap: () async {
+              await ref.read(updateProvider.notifier).check();
+              if (!context.mounted) return;
+              final offer = ref.read(updateProvider).offer;
+              if (offer == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('You are on the latest version')),
+                );
+                return;
+              }
+              await ref.read(updateProvider.notifier).install();
+            },
           ),
         ],
       ),

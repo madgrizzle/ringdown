@@ -8,9 +8,11 @@ import '../providers/alarms_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/ticker_provider.dart';
+import '../providers/update_provider.dart';
 import '../widgets/alarm_card.dart';
 import '../widgets/filter_bar.dart';
 import '../widgets/summary_strip.dart';
+import '../widgets/update_banner.dart';
 
 class AlarmListScreen extends ConsumerStatefulWidget {
   const AlarmListScreen({super.key});
@@ -32,6 +34,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       _started = true;
       ref.read(alarmsProvider.notifier).refresh();
       ref.read(alarmsProvider.notifier).drainAckQueue();
+      ref.read(updateProvider.notifier).check();
     });
   }
 
@@ -221,6 +224,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       ),
       body: Column(
         children: [
+          const UpdateBanner(),
           if (alarms.offline)
             Material(
               color: Theme.of(context).colorScheme.errorContainer,

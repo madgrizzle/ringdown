@@ -113,6 +113,18 @@ class ApiClient {
     return url;
   }
 
+  Future<Map<String, dynamic>> appVersion() async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/app/version',
+        options: Options(extra: {'skipAuth': true, 'skipRefresh': true}),
+      );
+      return res.data ?? const {};
+    } on DioException catch (e) {
+      throw ApiException(_message(e), statusCode: e.response?.statusCode);
+    }
+  }
+
   Future<void> checkHealth(String serverUrl) async {
     final url = normalizeBaseUrl(serverUrl);
     try {
