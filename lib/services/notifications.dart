@@ -27,6 +27,9 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     await Firebase.initializeApp();
   } catch (_) {}
+  // A `notification` payload is already shown by the OS. Showing another
+  // local notification is what produced duplicate banners.
+  if (message.notification != null) return;
   await NotificationService.showLocalFromMessage(message);
 }
 
@@ -125,6 +128,8 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       FirebaseMessaging.onMessage.listen((message) async {
         onRefresh?.call();
+        // iOS already presents the APNs alert when foreground options are on.
+        if (Platform.isIOS && message.notification != null) return;
         await showLocalFromMessage(message, plugin: _plugin);
       });
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
@@ -255,8 +260,10 @@ class NotificationService {
     if (id == null) return;
     final inAlarm = data['status'] == 'Y' || data['state'] == 'active';
     final title = message.notification?.title ??
+        data['title'] ??
         '${data['site_id'] ?? ''}: ${data['description'] ?? ''}';
     final body = message.notification?.body ??
+        data['body'] ??
         '${data['device'] ?? ''} — ${inAlarm ? 'Active' : 'Cleared'}';
 
     final android = AndroidNotificationDetails(
