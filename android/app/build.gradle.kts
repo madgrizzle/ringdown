@@ -4,6 +4,17 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
+
+
 android {
     namespace = "com.phionalerter.ringdown"
     compileSdk = flutter.compileSdkVersion
@@ -17,7 +28,7 @@ android {
 
     defaultConfig {
         applicationId = "com.phionalerter.ringdown"
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -27,11 +38,21 @@ android {
         versionName = flutter.versionName
     }
 
+
+    signingConfigs {
+        create("release") {
+             keyAlias = keystoreProperties.getProperty("keyAlias")
+             keyPassword = keystoreProperties.getProperty("keyPassword")
+             storeFile = keystoreProperties.getProperty("storeFile")?.let { file(it) }
+             storePassword = keystoreProperties.getProperty("storePassword")
+         }
+     }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

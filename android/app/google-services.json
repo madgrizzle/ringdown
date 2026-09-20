@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1065250070403",
+    "project_id": "phionalerter-nms",
+    "storage_bucket": "phionalerter-nms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1065250070403:android:5097ee9d8b928414c720b6",
+        "android_client_info": {
+          "package_name": "com.phionalerter.nmsalert"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4LRn7m0cPbw2QiBivjvPT_F0P8h9FdsM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
