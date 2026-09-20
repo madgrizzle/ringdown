@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -95,11 +96,17 @@ class NotificationService {
 
   bool firebaseReady = false;
   bool _initialized = false;
+  final Completer<void> _ready = Completer<void>();
+
+  Future<void> get ready => _ready.future;
 
   Future<void> init() async {
-    if (_initialized) return;
+    if (_initialized) {
+      await ready;
+      return;
+    }
     _initialized = true;
-
+    try {
     const androidInit = AndroidInitializationSettings('@drawable/ic_stat_ringdown');
     final darwinInit = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -160,6 +167,9 @@ class NotificationService {
     });
 
     await consumeNativePendingAck();
+    } finally {
+      if (!_ready.isCompleted) _ready.complete();
+    }
   }
 
   void _onResponse(NotificationResponse response) {
@@ -211,6 +221,11 @@ class NotificationService {
   Future<bool> requestPermissionAndRegister(
     Future<void> Function(String token, String platform) register,
   ) async {
+    try {
+      await ready.timeout(const Duration(seconds: 15));
+    } catch (_) {
+      debugPrint('Notification service not ready');
+    }
     if (Platform.isAndroid) {
       final androidOk = await requestAndroidNotifications();
       if (!androidOk) return false;
@@ -236,7 +251,7 @@ class NotificationService {
       );
     }
 
-    final token = await messaging.getToken();
+    final token = await _fcmToken(messaging);
     if (token != null) {
       final platform = Platform.isIOS ? 'ios' : 'android';
       await register(token, platform);
@@ -249,7 +264,24 @@ class NotificationService {
         debugPrint('FCM token refresh register failed: $e');
       }
     });
-    return true;
+    return token != null;
+  }
+
+  /// iOS requires an APNs token before FCM will issue a registration token.
+  Future<String?> _fcmToken(FirebaseMessaging messaging) async {
+    if (Platform.isIOS) {
+      for (var i = 0; i < 20; i++) {
+        final apns = await messaging.getAPNSToken();
+        if (apns != null) break;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    try {
+      return await messaging.getToken();
+    } catch (e) {
+      debugPrint('FCM getToken failed: $e');
+      return null;
+    }
   }
 
   static Future<void> showLocalFromMessage(

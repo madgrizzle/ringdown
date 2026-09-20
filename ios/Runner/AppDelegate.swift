@@ -25,7 +25,12 @@ import UserNotifications
     )
     UNUserNotificationCenter.current().setNotificationCategories([category])
 
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let ok = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // UIScene startup can skip plugin didFinishLaunching; register APNs here
+    // so FirebaseMessaging.getToken() has an APNs token on iOS.
+    UNUserNotificationCenter.current().delegate = self
+    application.registerForRemoteNotifications()
+    return ok
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

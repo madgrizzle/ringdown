@@ -39,7 +39,7 @@ Future<void> main() async {
 Future<void> _initNotifications(ProviderContainer container) async {
   try {
     final notifications = container.read(notificationServiceProvider);
-    await notifications.init().timeout(const Duration(seconds: 8));
+    await notifications.init().timeout(const Duration(seconds: 12));
     notifications.onRefresh = () {
       container.read(alarmsProvider.notifier).silentRefresh();
     };
@@ -52,6 +52,9 @@ Future<void> _initNotifications(ProviderContainer container) async {
     notifications.onAck = (id) {
       container.read(alarmsProvider.notifier).ackOne(id);
     };
+    if (container.read(authProvider).status == AuthStatus.authenticated) {
+      await container.read(authProvider.notifier).registerPush();
+    }
   } catch (e, st) {
     debugPrint('Notification init failed: $e\n$st');
   }

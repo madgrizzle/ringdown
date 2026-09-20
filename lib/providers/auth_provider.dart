@@ -141,6 +141,8 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  Future<void> registerPush() => _registerPush();
+
   Future<void> _registerPush() async {
     try {
       await _notify.requestPermissionAndRegister((token, platform) {
