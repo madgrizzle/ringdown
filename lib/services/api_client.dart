@@ -17,7 +17,9 @@ class ApiException implements Exception {
 class ApiClient {
   ApiClient({
     required this.token,
+    required this.refreshToken,
     required this.baseUrl,
+    required this.onTokens,
     required this.onUnauthorized,
     Dio? dio,
   }) : _dio = dio ??
@@ -43,10 +45,24 @@ class ApiClient {
           }
           handler.next(options);
         },
-        onError: (e, handler) {
-          if (e.response?.statusCode == 401 &&
-              e.requestOptions.extra['skipAuth'] != true) {
-            onUnauthorized();
+        onError: (e, handler) async {
+          final skip = e.requestOptions.extra['skipAuth'] == true ||
+              e.requestOptions.extra['skipRefresh'] == true;
+          if (e.response?.statusCode == 401 && !skip) {
+            try {
+              await _refreshSession();
+              final req = e.requestOptions;
+              req.extra['skipRefresh'] = true;
+              final t = token();
+              if (t != null) {
+                req.headers['Authorization'] = 'Bearer $t';
+              }
+              final res = await _dio.fetch(req);
+              handler.resolve(res);
+              return;
+            } catch (_) {
+              onUnauthorized();
+            }
           }
           handler.next(e);
         },
@@ -56,8 +72,37 @@ class ApiClient {
 
   final Dio _dio;
   final String? Function() token;
+  final String? Function() refreshToken;
   final String? Function() baseUrl;
+  final Future<void> Function(String access, String refresh) onTokens;
   final void Function() onUnauthorized;
+
+  Future<void>? _refreshing;
+
+  Future<void> _refreshSession() async {
+    if (_refreshing != null) {
+      await _refreshing;
+      return;
+    }
+    final pending = _doRefresh();
+    _refreshing = pending;
+    try {
+      await pending;
+    } finally {
+      _refreshing = null;
+    }
+  }
+
+  Future<void> _doRefresh() async {
+    final current = refreshToken();
+    if (current == null || current.isEmpty || current == 'refresh-not-implemented') {
+      throw ApiException('Not signed in', statusCode: 401);
+    }
+    final tokens = await refresh(current);
+    final access = tokens.accessToken;
+    final nextRefresh = tokens.refreshToken ?? current;
+    await onTokens(access, nextRefresh);
+  }
 
   static const defaultBaseUrl = 'https://api.phionalerter.com';
 
@@ -98,6 +143,29 @@ class ApiClient {
       final access = data['access_token'] as String?;
       if (access == null || access.isEmpty) {
         throw ApiException('Login did not return a token');
+      }
+      return (
+        accessToken: access,
+        refreshToken: data['refresh_token'] as String?,
+      );
+    } on DioException catch (e) {
+      throw ApiException(_message(e), statusCode: e.response?.statusCode);
+    }
+  }
+
+  Future<({String accessToken, String? refreshToken})> refresh(
+    String refreshToken,
+  ) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/auth/refresh',
+        data: {'refresh_token': refreshToken},
+        options: Options(extra: {'skipAuth': true, 'skipRefresh': true}),
+      );
+      final data = res.data ?? const {};
+      final access = data['access_token'] as String?;
+      if (access == null || access.isEmpty) {
+        throw ApiException('Refresh did not return a token');
       }
       return (
         accessToken: access,

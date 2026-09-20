@@ -24,10 +24,12 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> restore() async {
     String? url;
     String? token;
+    String? refresh;
     String? lastUser;
     try {
       url = await _secure.readServerUrl();
       token = await _secure.readAccessToken();
+      refresh = await _secure.readRefreshToken();
       lastUser = await _secure.readUsername() ?? _prefs.readLastUsername();
     } catch (e) {
       state = const AuthState(status: AuthStatus.needsServer);
@@ -40,7 +42,8 @@ class AuthNotifier extends Notifier<AuthState> {
       );
       return;
     }
-    if (token == null || token.isEmpty) {
+    if ((token == null || token.isEmpty) &&
+        (refresh == null || refresh.isEmpty)) {
       state = AuthState(
         status: AuthStatus.needsLogin,
         serverUrl: url,
@@ -52,6 +55,7 @@ class AuthNotifier extends Notifier<AuthState> {
       status: AuthStatus.authenticated,
       serverUrl: url,
       token: token,
+      refreshToken: refresh,
       lastUsername: lastUser,
     );
     try {
@@ -66,7 +70,6 @@ class AuthNotifier extends Notifier<AuthState> {
       if (e.statusCode == 401) {
         await handleUnauthorized();
       } else {
-        // Keep the session; list screen will show cached/offline.
         state = state.copyWith(lastUsername: lastUser);
       }
     } catch (_) {
@@ -100,17 +103,14 @@ class AuthNotifier extends Notifier<AuthState> {
     required String password,
   }) async {
     final tokens = await _api.login(username: username, password: password);
-    await _secure.writeAccessToken(tokens.accessToken);
-    if (tokens.refreshToken != null &&
-        tokens.refreshToken != 'refresh-not-implemented') {
-      await _secure.writeRefreshToken(tokens.refreshToken!);
-    }
+    await applyTokens(
+      access: tokens.accessToken,
+      refresh: tokens.refreshToken,
+    );
     await _secure.writeUsername(username);
     await _prefs.writeLastUsername(username);
-    state = AuthState(
+    state = state.copyWith(
       status: AuthStatus.authenticated,
-      serverUrl: state.serverUrl,
-      token: tokens.accessToken,
       username: username,
       lastUsername: username,
     );
@@ -130,6 +130,19 @@ class AuthNotifier extends Notifier<AuthState> {
       status: AuthStatus.needsLogin,
       serverUrl: state.serverUrl,
       lastUsername: state.lastUsername ?? state.username,
+    );
+  }
+
+  Future<void> applyTokens({required String access, String? refresh}) async {
+    await _secure.writeAccessToken(access);
+    if (refresh != null &&
+        refresh.isNotEmpty &&
+        refresh != 'refresh-not-implemented') {
+      await _secure.writeRefreshToken(refresh);
+    }
+    state = state.copyWith(
+      token: access,
+      refreshToken: refresh ?? state.refreshToken,
     );
   }
 
@@ -170,7 +183,14 @@ final notificationServiceProvider =
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
     token: () => ref.read(authProvider).token,
+    refreshToken: () => ref.read(authProvider).refreshToken,
     baseUrl: () => ref.read(authProvider).serverUrl,
+    onTokens: (access, refresh) {
+      return ref.read(authProvider.notifier).applyTokens(
+            access: access,
+            refresh: refresh,
+          );
+    },
     onUnauthorized: () {
       ref.read(authProvider.notifier).handleUnauthorized();
     },

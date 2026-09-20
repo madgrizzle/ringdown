@@ -5,6 +5,7 @@ class AuthState {
     required this.status,
     this.serverUrl,
     this.token,
+    this.refreshToken,
     this.username,
     this.inboxEmail,
     this.lastUsername,
@@ -13,6 +14,7 @@ class AuthState {
   final AuthStatus status;
   final String? serverUrl;
   final String? token;
+  final String? refreshToken;
   final String? username;
   final String? inboxEmail;
   final String? lastUsername;
@@ -23,6 +25,7 @@ class AuthState {
     AuthStatus? status,
     String? serverUrl,
     String? token,
+    String? refreshToken,
     String? username,
     String? inboxEmail,
     String? lastUsername,
@@ -32,6 +35,7 @@ class AuthState {
       status: status ?? this.status,
       serverUrl: serverUrl ?? this.serverUrl,
       token: clearToken ? null : (token ?? this.token),
+      refreshToken: clearToken ? null : (refreshToken ?? this.refreshToken),
       username: username ?? this.username,
       inboxEmail: inboxEmail ?? this.inboxEmail,
       lastUsername: lastUsername ?? this.lastUsername,
