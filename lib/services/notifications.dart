@@ -132,10 +132,18 @@ class NotificationService {
     try {
       await Firebase.initializeApp();
       firebaseReady = true;
+      if (Platform.isIOS) {
+        await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       FirebaseMessaging.onMessage.listen((message) async {
         onRefresh?.call();
-        // iOS already presents the APNs alert when foreground options are on.
+        // iOS presents the APNs banner via AppDelegate.willPresent. Showing
+        // another local notification would duplicate it.
         if (Platform.isIOS && message.notification != null) return;
         await showLocalFromMessage(message, plugin: _plugin);
       });
