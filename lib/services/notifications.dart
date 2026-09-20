@@ -46,15 +46,23 @@ void onBackgroundNotificationResponse(NotificationResponse response) {
 Future<void> ackFromBackground(int alarmId) async {
   try {
     const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'access_token');
+    var access = await storage.read(key: 'access_token');
+    var refresh = await storage.read(key: 'refresh_token');
     final url = await storage.read(key: 'server_url');
-    if (token == null || url == null) {
+    if (access == null || url == null) {
       await _enqueue(alarmId);
       return;
     }
     final dio = ApiClient(
-      token: () => token,
+      token: () => access,
+      refreshToken: () => refresh,
       baseUrl: () => url,
+      onTokens: (newAccess, newRefresh) async {
+        access = newAccess;
+        refresh = newRefresh;
+        await storage.write(key: 'access_token', value: newAccess);
+        await storage.write(key: 'refresh_token', value: newRefresh);
+      },
       onUnauthorized: () {},
     );
     try {
