@@ -162,7 +162,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           ListTile(
             title: const Text('Notification sound & vibration'),
-            subtitle: const Text('Uses the system nms_alarms channel'),
+            subtitle: const Text(
+              'Enable notifications, then set sound and vibration',
+            ),
             onTap: () =>
                 ref.read(notificationServiceProvider).openNotificationSettings(),
           ),

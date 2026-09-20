@@ -117,19 +117,7 @@ class NotificationService {
       onDidReceiveBackgroundNotificationResponse: onBackgroundNotificationResponse,
     );
 
-    final android = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    await android?.createNotificationChannel(
-      const AndroidNotificationChannel(
-        nmsAlarmsChannelId,
-        'NMS Alarms',
-        description: 'Telenium NMS alarm notifications',
-        importance: Importance.high,
-        playSound: true,
-        enableVibration: true,
-        showBadge: true,
-      ),
-    );
+    await ensureAlarmChannel();
 
     try {
       await Firebase.initializeApp();
@@ -185,10 +173,41 @@ class NotificationService {
     } catch (_) {}
   }
 
+  AndroidFlutterLocalNotificationsPlugin? get _androidPlugin =>
+      _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+
+  Future<void> ensureAlarmChannel() async {
+    await _androidPlugin?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        nmsAlarmsChannelId,
+        'NMS Alarms',
+        description: 'Telenium NMS alarm notifications',
+        importance: Importance.high,
+        playSound: true,
+        enableVibration: true,
+        showBadge: true,
+      ),
+    );
+  }
+
+  /// Android 13+ runtime permission. Independent of Firebase.
+  Future<bool> requestAndroidNotifications() async {
+    if (!Platform.isAndroid) return true;
+    await ensureAlarmChannel();
+    final requested = await _androidPlugin?.requestNotificationsPermission();
+    if (requested == true) return true;
+    return await _androidPlugin?.areNotificationsEnabled() ?? false;
+  }
+
   /// Request permission, then register the FCM token. Returns false if denied.
   Future<bool> requestPermissionAndRegister(
     Future<void> Function(String token, String platform) register,
   ) async {
+    if (Platform.isAndroid) {
+      final androidOk = await requestAndroidNotifications();
+      if (!androidOk) return false;
+    }
     if (!firebaseReady) return false;
     final messaging = FirebaseMessaging.instance;
     final settings = await messaging.requestPermission(
@@ -276,10 +295,21 @@ class NotificationService {
     );
   }
 
+  /// Opens system notification settings.
+  ///
+  /// If Android notifications are still disabled, opens the *app* notification
+  /// screen (master "Show notifications" switch). Opening the channel page
+  /// while the app is blocked is what produces "At your request, Android is
+  /// blocking this category of notifications".
   Future<void> openNotificationSettings() async {
     try {
       if (Platform.isAndroid) {
-        await _settingsChannel.invokeMethod('openNotificationChannel');
+        final enabled = await requestAndroidNotifications();
+        if (enabled) {
+          await _settingsChannel.invokeMethod('openNotificationChannel');
+        } else {
+          await _settingsChannel.invokeMethod('openAppNotificationSettings');
+        }
       } else {
         await _settingsChannel.invokeMethod('openAppSettings');
       }
