@@ -12,8 +12,6 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    UNUserNotificationCenter.current().delegate = self
-
     let ack = UNNotificationAction(
       identifier: "ACK",
       title: "ACK",
@@ -32,10 +30,8 @@ import UserNotifications
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    guard let messenger = engineBridge.pluginRegistry.registrar(forPlugin: "ringdown.native")?.messenger() else {
-      return
-    }
 
+    let messenger = engineBridge.applicationRegistrar.messenger()
     notifyChannel = FlutterMethodChannel(name: notifyChannelName, binaryMessenger: messenger)
     notifyChannel?.setMethodCallHandler { call, result in
       if call.method == "takePendingAck" {

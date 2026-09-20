@@ -22,10 +22,17 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> restore() async {
-    final url = await _secure.readServerUrl();
-    final token = await _secure.readAccessToken();
-    final lastUser =
-        await _secure.readUsername() ?? _prefs.readLastUsername();
+    String? url;
+    String? token;
+    String? lastUser;
+    try {
+      url = await _secure.readServerUrl();
+      token = await _secure.readAccessToken();
+      lastUser = await _secure.readUsername() ?? _prefs.readLastUsername();
+    } catch (e) {
+      state = const AuthState(status: AuthStatus.needsServer);
+      return;
+    }
     if (url == null || url.isEmpty) {
       state = AuthState(
         status: AuthStatus.needsServer,

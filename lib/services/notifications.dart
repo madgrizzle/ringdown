@@ -136,7 +136,9 @@ class NotificationService {
         final id = alarmIdFromData(message.data);
         if (id != null) onTap?.call(id);
       });
-      final initial = await FirebaseMessaging.instance.getInitialMessage();
+      final initial = await FirebaseMessaging.instance
+          .getInitialMessage()
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
       if (initial != null) {
         final id = alarmIdFromData(initial.data);
         if (id != null) onTap?.call(id);

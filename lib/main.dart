@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,27 +24,37 @@ Future<void> main() async {
     ],
   );
 
-  final notifications = container.read(notificationServiceProvider);
-  await notifications.init();
-  notifications.onRefresh = () {
-    container.read(alarmsProvider.notifier).silentRefresh();
-  };
-  notifications.onTap = (id) {
-    container.read(pendingAlarmIdProvider.notifier).state = id;
-    if (container.read(authProvider).status == AuthStatus.authenticated) {
-      container.read(routerProvider).go('/alarms/$id');
-    }
-  };
-  notifications.onAck = (id) {
-    container.read(alarmsProvider.notifier).ackOne(id);
-  };
-
+  // Paint the first frame immediately. Firebase / APNs init can hang on iOS
+  // (getInitialMessage) and that left the white launch screen up forever.
   runApp(
     UncontrolledProviderScope(
       container: container,
       child: const RingdownApp(),
     ),
   );
+
+  unawaited(_initNotifications(container));
+}
+
+Future<void> _initNotifications(ProviderContainer container) async {
+  try {
+    final notifications = container.read(notificationServiceProvider);
+    await notifications.init().timeout(const Duration(seconds: 8));
+    notifications.onRefresh = () {
+      container.read(alarmsProvider.notifier).silentRefresh();
+    };
+    notifications.onTap = (id) {
+      container.read(pendingAlarmIdProvider.notifier).state = id;
+      if (container.read(authProvider).status == AuthStatus.authenticated) {
+        container.read(routerProvider).go('/alarms/$id');
+      }
+    };
+    notifications.onAck = (id) {
+      container.read(alarmsProvider.notifier).ackOne(id);
+    };
+  } catch (e, st) {
+    debugPrint('Notification init failed: $e\n$st');
+  }
 }
 
 class RingdownApp extends ConsumerStatefulWidget {
