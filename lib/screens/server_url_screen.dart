@@ -20,7 +20,9 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
   @override
   void initState() {
     super.initState();
-    _controller.text = ref.read(authProvider).serverUrl ?? '';
+    final existing = ref.read(authProvider).serverUrl;
+    _controller.text =
+        (existing != null && existing.isNotEmpty) ? existing : ApiClient.defaultBaseUrl;
   }
 
   @override
@@ -74,7 +76,7 @@ class _ServerUrlScreenState extends ConsumerState<ServerUrlScreen> {
                   autofillHints: const [AutofillHints.url],
                   decoration: const InputDecoration(
                     labelText: 'Server URL',
-                    hintText: 'https://api.phionalerter.com',
+                    hintText: ApiClient.defaultBaseUrl,
                     border: OutlineInputBorder(),
                   ),
                   validator: (v) {

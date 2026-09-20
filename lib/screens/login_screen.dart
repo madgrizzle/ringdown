@@ -70,7 +70,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     server,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: () =>
+                          ref.read(authProvider.notifier).changeServer(),
+                      child: const Text('Change server'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   TextFormField(
                     controller: _user,
                     autofillHints: const [AutofillHints.username],

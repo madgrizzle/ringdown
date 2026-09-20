@@ -59,6 +59,8 @@ class ApiClient {
   final String? Function() baseUrl;
   final void Function() onUnauthorized;
 
+  static const defaultBaseUrl = 'https://api.phionalerter.com';
+
   static String normalizeBaseUrl(String raw) {
     var url = raw.trim();
     if (url.endsWith('/')) url = url.substring(0, url.length - 1);

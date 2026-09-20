@@ -74,6 +74,14 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  void changeServer() {
+    state = AuthState(
+      status: AuthStatus.needsServer,
+      serverUrl: state.serverUrl,
+      lastUsername: state.lastUsername ?? state.username,
+    );
+  }
+
   Future<void> saveServerUrl(String raw) async {
     final url = ApiClient.normalizeBaseUrl(raw);
     await _api.checkHealth(url);

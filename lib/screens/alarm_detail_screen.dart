@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../models/alarm.dart';
@@ -96,7 +97,20 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
     final alarm = fromList.isNotEmpty ? fromList.first : _alarm;
 
     return Scaffold(
-      appBar: AppBar(title: Text(alarm?.siteId ?? 'Alarm')),
+      appBar: AppBar(
+        title: Text(alarm?.siteId ?? 'Alarm'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to alarms',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/alarms');
+            }
+          },
+        ),
+      ),
       body: _loading && alarm == null
           ? const Center(child: CircularProgressIndicator())
           : alarm == null

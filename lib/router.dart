@@ -49,7 +49,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         case AuthStatus.needsServer:
           return loc == '/server' ? null : '/server';
         case AuthStatus.needsLogin:
-          return loc == '/login' || loc == '/server' ? null : '/login';
+          return loc == '/login' ? null : '/login';
         case AuthStatus.authenticated:
           if (loc == '/login' || loc == '/server' || loc == '/splash') {
             final id = ref.read(pendingAlarmIdProvider);
@@ -68,13 +68,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
       GoRoute(path: '/server', builder: (context, state) => const ServerUrlScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(path: '/alarms', builder: (context, state) => const AlarmListScreen()),
       GoRoute(
-        path: '/alarms/:id',
-        builder: (_, state) {
-          final id = int.parse(state.pathParameters['id']!);
-          return AlarmDetailScreen(alarmId: id);
-        },
+        path: '/alarms',
+        builder: (context, state) => const AlarmListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (context, state) {
+              final id = int.parse(state.pathParameters['id']!);
+              return AlarmDetailScreen(alarmId: id);
+            },
+          ),
+        ],
       ),
       GoRoute(path: '/settings', builder: (context, state) => const SettingsScreen()),
     ],
