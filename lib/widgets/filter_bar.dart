@@ -33,6 +33,12 @@ class FilterBar extends StatelessWidget {
             onSelected: (v) => onChanged(filters.copyWith(unackedOnly: v)),
           ),
           const SizedBox(width: 8),
+          FilterChip(
+            label: const Text('Show hidden'),
+            selected: filters.showHidden,
+            onSelected: (v) => onChanged(filters.copyWith(showHidden: v)),
+          ),
+          const SizedBox(width: 8),
           _MenuChip<SortMode>(
             label: 'Sort: ${filters.sort.label}',
             values: SortMode.values,
@@ -154,6 +160,15 @@ Future<AlarmFilters?> showFilterSheet({
                   value: draft.unackedOnly,
                   onChanged: (v) => setState(() {
                     draft = draft.copyWith(unackedOnly: v);
+                  }),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Show hidden'),
+                  subtitle: const Text('Alarms you hid still stay acknowledged'),
+                  value: draft.showHidden,
+                  onChanged: (v) => setState(() {
+                    draft = draft.copyWith(showHidden: v);
                   }),
                 ),
                 const SizedBox(height: 8),

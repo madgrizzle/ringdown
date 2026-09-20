@@ -120,12 +120,44 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     await _ack(context, ids);
   }
 
+  Future<void> _hide(BuildContext context, Alarm alarm) async {
+    await ref.read(settingsProvider.notifier).hideAlarm(alarm.id);
+    if (alarm.canAck && context.mounted) {
+      await ref.read(alarmsProvider.notifier).ackOne(alarm.id);
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          alarm.canAck ? 'Hidden and acknowledged' : 'Alarm hidden',
+        ),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _unhide(BuildContext context, Alarm alarm) async {
+    await ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alarm unhidden')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final alarms = ref.watch(alarmsProvider);
-    final filters = ref.watch(settingsProvider).filters;
-    final freeze = ref.watch(settingsProvider).clearedFreeze;
+    final settings = ref.watch(settingsProvider);
+    final filters = settings.filters;
+    final freeze = settings.clearedFreeze;
+    final hiddenIds = settings.hiddenIds;
     final now = ref.watch(tickerProvider);
     final items = ref.read(alarmsProvider.notifier).visibleItems;
     final unackedCount =
@@ -243,6 +275,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                 filters: filters,
                 now: now,
                 freeze: freeze,
+                hiddenIds: hiddenIds,
               ),
             ),
           ),
@@ -296,6 +329,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     required AlarmFilters filters,
     required DateTime now,
     required Map<int, DateTime> freeze,
+    required Set<int> hiddenIds,
   }) {
     if (alarms.loading && items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -344,7 +378,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _card(context, items[i], now, freeze, alarms);
+          return _card(context, items[i], now, freeze, alarms, hiddenIds);
         },
       );
     }
@@ -393,7 +427,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
               ),
             ),
             for (final a in group) ...[
-              _card(context, a, now, freeze, alarms),
+              _card(context, a, now, freeze, alarms, hiddenIds),
               const SizedBox(height: 8),
             ],
           ],
@@ -408,14 +442,19 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     DateTime now,
     Map<int, DateTime> freeze,
     AlarmsState alarms,
+    Set<int> hiddenIds,
   ) {
+    final hidden = hiddenIds.contains(alarm.id);
     return AlarmCard(
       alarm: alarm,
       now: now,
       clearedFreezeAt: freeze[alarm.id],
       selecting: alarms.selecting,
       selected: alarms.selected.contains(alarm.id),
+      hidden: hidden,
       onAck: () => _ack(context, [alarm.id]),
+      onHide: () => _hide(context, alarm),
+      onUnhide: () => _unhide(context, alarm),
       onOpen: () => context.push('/alarms/${alarm.id}'),
       onLongPress: () =>
           ref.read(alarmsProvider.notifier).enterSelect(firstId: alarm.id),

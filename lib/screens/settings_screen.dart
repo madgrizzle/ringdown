@@ -121,6 +121,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Divider(),
           SwitchListTile(
             title: const Text('Hide cleared by default'),
+            subtitle: const Text(
+              'When you open the alarm list, skip alarms that have already returned to normal. Turn this off if you still want to see those until you hide them yourself.',
+            ),
+            isThreeLine: true,
             value: settings.filters.hideCleared,
             onChanged: (v) {
               ref.read(settingsProvider.notifier).setFilters(
@@ -130,6 +134,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           SwitchListTile(
             title: const Text('Unacked only by default'),
+            subtitle: const Text(
+              'When you open the alarm list, show only alarms that still need an ACK. Acknowledged alarms stay off the list until you turn this off.',
+            ),
+            isThreeLine: true,
             value: settings.filters.unackedOnly,
             onChanged: (v) {
               ref.read(settingsProvider.notifier).setFilters(

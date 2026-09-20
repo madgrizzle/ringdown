@@ -9,21 +9,25 @@ class SettingsState {
     required this.themeMode,
     required this.filters,
     required this.clearedFreeze,
+    this.hiddenIds = const {},
   });
 
   final ThemeMode themeMode;
   final AlarmFilters filters;
   final Map<int, DateTime> clearedFreeze;
+  final Set<int> hiddenIds;
 
   SettingsState copyWith({
     ThemeMode? themeMode,
     AlarmFilters? filters,
     Map<int, DateTime>? clearedFreeze,
+    Set<int>? hiddenIds,
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
       filters: filters ?? this.filters,
       clearedFreeze: clearedFreeze ?? this.clearedFreeze,
+      hiddenIds: hiddenIds ?? this.hiddenIds,
     );
   }
 }
@@ -38,6 +42,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       themeMode: _parseTheme(prefs.readThemeMode()),
       filters: prefs.readFilters(),
       clearedFreeze: prefs.readClearedFreeze(),
+      hiddenIds: prefs.readHiddenIds(),
     );
   }
 
@@ -75,6 +80,20 @@ class SettingsNotifier extends Notifier<SettingsState> {
     if (!changed) return;
     state = state.copyWith(clearedFreeze: next);
     await _prefs.writeClearedFreeze(next);
+  }
+
+  Future<void> hideAlarm(int alarmId) async {
+    if (state.hiddenIds.contains(alarmId)) return;
+    final next = {...state.hiddenIds, alarmId};
+    state = state.copyWith(hiddenIds: next);
+    await _prefs.writeHiddenIds(next);
+  }
+
+  Future<void> unhideAlarm(int alarmId) async {
+    if (!state.hiddenIds.contains(alarmId)) return;
+    final next = {...state.hiddenIds}..remove(alarmId);
+    state = state.copyWith(hiddenIds: next);
+    await _prefs.writeHiddenIds(next);
   }
 
   Future<void> clearFreeze(int alarmId) async {

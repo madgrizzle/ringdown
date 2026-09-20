@@ -203,9 +203,12 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   }
 
   List<Alarm> get visibleItems {
-    final search = _filters.search.trim().toLowerCase();
-    if (search.isEmpty) return state.items;
-    return _applyClientSearch(state.items, _filters);
+    var items = _applyClientSearch(state.items, _filters);
+    final hidden = ref.read(settingsProvider).hiddenIds;
+    if (!_filters.showHidden) {
+      items = items.where((a) => !hidden.contains(a.id)).toList();
+    }
+    return items;
   }
 
   void enterSelect({int? firstId}) {

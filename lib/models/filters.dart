@@ -64,6 +64,7 @@ class AlarmFilters {
   const AlarmFilters({
     this.hideCleared = true,
     this.unackedOnly = false,
+    this.showHidden = false,
     this.siteContains = '',
     this.deviceContains = '',
     this.search = '',
@@ -73,6 +74,7 @@ class AlarmFilters {
 
   final bool hideCleared;
   final bool unackedOnly;
+  final bool showHidden;
   final String siteContains;
   final String deviceContains;
   final String search;
@@ -82,6 +84,7 @@ class AlarmFilters {
   AlarmFilters copyWith({
     bool? hideCleared,
     bool? unackedOnly,
+    bool? showHidden,
     String? siteContains,
     String? deviceContains,
     String? search,
@@ -91,6 +94,7 @@ class AlarmFilters {
     return AlarmFilters(
       hideCleared: hideCleared ?? this.hideCleared,
       unackedOnly: unackedOnly ?? this.unackedOnly,
+      showHidden: showHidden ?? this.showHidden,
       siteContains: siteContains ?? this.siteContains,
       deviceContains: deviceContains ?? this.deviceContains,
       search: search ?? this.search,
@@ -102,6 +106,7 @@ class AlarmFilters {
   Map<String, dynamic> toJson() => {
         'hideCleared': hideCleared,
         'unackedOnly': unackedOnly,
+        'showHidden': showHidden,
         'siteContains': siteContains,
         'deviceContains': deviceContains,
         'search': search,
@@ -113,6 +118,7 @@ class AlarmFilters {
     return AlarmFilters(
       hideCleared: json['hideCleared'] as bool? ?? true,
       unackedOnly: json['unackedOnly'] as bool? ?? false,
+      showHidden: json['showHidden'] as bool? ?? false,
       siteContains: json['siteContains'] as String? ?? '',
       deviceContains: json['deviceContains'] as String? ?? '',
       search: json['search'] as String? ?? '',

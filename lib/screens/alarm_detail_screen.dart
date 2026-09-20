@@ -64,6 +64,35 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
     }
   }
 
+  Future<void> _toggleHidden(Alarm alarm, bool currentlyHidden) async {
+    if (currentlyHidden) {
+      await ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Alarm unhidden')),
+        );
+      }
+      return;
+    }
+    await ref.read(settingsProvider.notifier).hideAlarm(alarm.id);
+    if (alarm.canAck) {
+      await ref.read(alarmsProvider.notifier).ackOne(alarm.id);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          alarm.canAck ? 'Hidden and acknowledged' : 'Alarm hidden',
+        ),
+      ),
+    );
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/alarms');
+    }
+  }
+
   Future<void> _ack() async {
     final result =
         await ref.read(alarmsProvider.notifier).ackOne(widget.alarmId);
@@ -96,6 +125,9 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
         .where((a) => a.id == widget.alarmId);
     final alarm = fromList.isNotEmpty ? fromList.first : _alarm;
 
+    final hidden = alarm != null &&
+        ref.watch(settingsProvider).hiddenIds.contains(alarm.id);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(alarm?.siteId ?? 'Alarm'),
@@ -110,6 +142,13 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
             }
           },
         ),
+        actions: [
+          if (alarm != null)
+            TextButton(
+              onPressed: () => _toggleHidden(alarm, hidden),
+              child: Text(hidden ? 'Unhide' : 'Hide'),
+            ),
+        ],
       ),
       body: _loading && alarm == null
           ? const Center(child: CircularProgressIndicator())

@@ -14,6 +14,7 @@ class PrefsStore {
   static const _themeKey = 'theme_mode';
   static const _freezeKey = 'cleared_freeze';
   static const _lastUsernameKey = 'last_username';
+  static const _hiddenKey = 'hidden_alarm_ids';
 
   AlarmFilters readFilters() {
     final raw = _prefs.getString(_filtersKey);
@@ -59,4 +60,19 @@ class PrefsStore {
 
   Future<void> writeLastUsername(String username) =>
       _prefs.setString(_lastUsernameKey, username);
+
+  Set<int> readHiddenIds() {
+    final raw = _prefs.getStringList(_hiddenKey) ?? const [];
+    return {
+      for (final s in raw)
+        if (int.tryParse(s) != null) int.parse(s),
+    };
+  }
+
+  Future<void> writeHiddenIds(Set<int> ids) {
+    return _prefs.setStringList(
+      _hiddenKey,
+      ids.map((e) => e.toString()).toList(),
+    );
+  }
 }

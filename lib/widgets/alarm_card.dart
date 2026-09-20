@@ -13,7 +13,10 @@ class AlarmCard extends StatelessWidget {
     this.clearedFreezeAt,
     this.selecting = false,
     this.selected = false,
+    this.hidden = false,
     this.onAck,
+    this.onHide,
+    this.onUnhide,
     this.onOpen,
     this.onLongPress,
     this.onToggleSelect,
@@ -24,12 +27,16 @@ class AlarmCard extends StatelessWidget {
   final DateTime? clearedFreezeAt;
   final bool selecting;
   final bool selected;
+  final bool hidden;
   final VoidCallback? onAck;
+  final VoidCallback? onHide;
+  final VoidCallback? onUnhide;
   final VoidCallback? onOpen;
   final VoidCallback? onLongPress;
   final VoidCallback? onToggleSelect;
 
   Color get _stripe {
+    if (hidden) return const Color(0xFF78909C);
     if (alarm.isActive && !alarm.acked) return RingdownColors.activeUnacked;
     if (alarm.isActive && alarm.acked) return RingdownColors.activeAcked;
     if (alarm.isCleared && !alarm.acked) return RingdownColors.unackedAmber;
@@ -38,7 +45,7 @@ class AlarmCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final muted = alarm.isCleared;
+    final muted = alarm.isCleared || hidden;
     final card = Card(
       color: Theme.of(context).cardTheme.color?.withValues(
             alpha: muted && alarm.acked ? 0.7 : 1,
@@ -96,6 +103,19 @@ class AlarmCard extends StatelessWidget {
                         children: [
                           StatusChip(alarm: alarm),
                           AckChip(alarm: alarm),
+                          if (hidden)
+                            Chip(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              label: const Text('HIDDEN'),
+                              labelStyle: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                            ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -108,21 +128,37 @@ class AlarmCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!selecting && alarm.canAck)
+              if (!selecting)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                  child: Center(
-                    child: Semantics(
-                      button: true,
-                      label: 'Acknowledge alarm at ${alarm.siteId}',
-                      child: SizedBox(
-                        height: 48,
-                        child: FilledButton(
-                          onPressed: onAck,
-                          child: const Text('ACK'),
+                  padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (alarm.canAck)
+                        Semantics(
+                          button: true,
+                          label: 'Acknowledge alarm at ${alarm.siteId}',
+                          child: SizedBox(
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: onAck,
+                              child: const Text('ACK'),
+                            ),
+                          ),
                         ),
+                      SizedBox(
+                        height: 48,
+                        child: hidden
+                            ? TextButton(
+                                onPressed: onUnhide,
+                                child: const Text('Unhide'),
+                              )
+                            : TextButton(
+                                onPressed: onHide,
+                                child: const Text('Hide'),
+                              ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
             ],
@@ -131,16 +167,35 @@ class AlarmCard extends StatelessWidget {
       ),
     );
 
-    if (selecting || !alarm.canAck) return card;
+    if (selecting) return card;
 
     return Dismissible(
-      key: ValueKey('ack-${alarm.id}'),
-      direction: DismissDirection.endToStart,
-      confirmDismiss: (_) async {
-        onAck?.call();
+      key: ValueKey('swipe-${alarm.id}'),
+      direction: alarm.canAck
+          ? DismissDirection.horizontal
+          : DismissDirection.startToEnd,
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          if (hidden) {
+            onUnhide?.call();
+          } else {
+            onHide?.call();
+          }
+        } else {
+          onAck?.call();
+        }
         return false;
       },
       background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        color: const Color(0xFF546E7A).withValues(alpha: 0.4),
+        child: Text(
+          hidden ? 'UNHIDE' : 'HIDE',
+          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        ),
+      ),
+      secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.symmetric(horizontal: 24),
         color: RingdownColors.cleared.withValues(alpha: 0.35),
