@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../models/auth_state.dart';
 import '../models/filters.dart';
@@ -87,11 +88,18 @@ class AlarmsState {
 class AlarmsNotifier extends Notifier<AlarmsState> {
   Timer? _poll;
   bool _loadMoreInFlight = false;
+  final Set<int> _autoAckInFlight = {};
 
   ApiClient get _api => ref.read(apiClientProvider);
   AlarmCache get _cache => ref.read(alarmCacheProvider);
   AckQueue get _queue => ref.read(ackQueueProvider);
-  AlarmFilters get _filters => ref.read(settingsProvider).filters;
+  AlarmFilters get _filters {
+    final filters = ref.read(settingsProvider).filters;
+    if (kShowAcknowledgements) return filters;
+    final sort = filters.sort.withoutAcknowledgement;
+    if (!filters.unackedOnly && sort == filters.sort) return filters;
+    return filters.copyWith(unackedOnly: false, sort: sort);
+  }
 
   @override
   AlarmsState build() {
@@ -141,6 +149,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
         truncated: clientSort && page.total > items.length,
         clearError: true,
       );
+      unawaited(_autoAcknowledge(items));
     } catch (e) {
       final cached = _cache.load();
       if (cached != null && cached.items.isNotEmpty) {
@@ -151,6 +160,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
           offline: true,
           error: _err(e),
         );
+        unawaited(_autoAcknowledge(cached.items));
       } else {
         state = state.copyWith(
           loading: false,
@@ -190,6 +200,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
         loadingMore: false,
         offline: false,
       );
+      unawaited(_autoAcknowledge(items));
     } catch (e) {
       state = state.copyWith(loadingMore: false, error: _err(e));
     } finally {
@@ -341,6 +352,51 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     );
   }
 
+  /// Acknowledges alarms that can still be acknowledged, without any UI.
+  /// No-ops while manual acknowledgement is visible.
+  Future<void> _autoAcknowledge(Iterable<Alarm> alarms) {
+    if (kShowAcknowledgements) return Future<void>.value();
+    final ids = <int>[];
+    for (final alarm in alarms) {
+      if (!alarm.canAck) continue;
+      if (_autoAckInFlight.add(alarm.id)) ids.add(alarm.id);
+    }
+    if (ids.isEmpty) return Future<void>.value();
+    return _finishAutoAck(ids, ackMany(ids));
+  }
+
+  /// Acknowledges one alarm that just arrived, even if it is not loaded yet.
+  Future<void> acknowledgeIncoming(int id) {
+    if (kShowAcknowledgements) return Future<void>.value();
+    if (!_autoAckInFlight.add(id)) return Future<void>.value();
+    final match = state.items.where((a) => a.id == id).toList();
+    if (match.isNotEmpty && !match.first.canAck) {
+      _autoAckInFlight.remove(id);
+      return Future<void>.value();
+    }
+    final future = match.isNotEmpty ? ackMany([id]) : _ackUnknown(id);
+    return _finishAutoAck([id], future);
+  }
+
+  Future<void> _finishAutoAck(List<int> ids, Future<Object?> future) async {
+    try {
+      await future;
+    } finally {
+      _autoAckInFlight.removeAll(ids);
+    }
+  }
+
+  Future<void> _ackUnknown(int id) async {
+    try {
+      await _api.ack(id);
+      await _queue.remove(id);
+    } on ApiException catch (e) {
+      if (e.statusCode == null) await _queue.enqueue(id);
+    } catch (_) {
+      await _queue.enqueue(id);
+    }
+  }
+
   Future<AckBatchResult> ackSite(String siteId) {
     final ids = visibleItems
         .where((a) => a.siteId == siteId && a.canAck)
@@ -361,6 +417,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
       final alarm = await _api.getAlarm(id);
       _upsert(alarm);
       _captureClearedFreezes(state.items, [alarm]);
+      unawaited(_autoAcknowledge([alarm]));
       return alarm;
     } catch (e) {
       final local = state.items.where((a) => a.id == id);

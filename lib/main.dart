@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'acknowledgements.dart';
 import 'models/auth_state.dart';
 import 'providers/alarms_provider.dart';
 import 'providers/auth_provider.dart';
@@ -51,6 +52,11 @@ Future<void> _initNotifications(ProviderContainer container) async {
     };
     notifications.onAck = (id) {
       container.read(alarmsProvider.notifier).ackOne(id);
+    };
+    notifications.onIncomingAlarm = (id) {
+      if (!kShowAcknowledgements) {
+        container.read(alarmsProvider.notifier).acknowledgeIncoming(id);
+      }
     };
     if (container.read(authProvider).status == AuthStatus.authenticated) {
       await container.read(authProvider.notifier).registerPush();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../acknowledgements.dart';
 import '../models/filters.dart';
 
 class FilterBar extends StatelessWidget {
@@ -26,12 +27,14 @@ class FilterBar extends StatelessWidget {
             selected: filters.hideCleared,
             onSelected: (v) => onChanged(filters.copyWith(hideCleared: v)),
           ),
-          const SizedBox(width: 8),
-          FilterChip(
-            label: const Text('Unacked only'),
-            selected: filters.unackedOnly,
-            onSelected: (v) => onChanged(filters.copyWith(unackedOnly: v)),
-          ),
+          if (kShowAcknowledgements) ...[
+            const SizedBox(width: 8),
+            FilterChip(
+              label: const Text('Unacked only'),
+              selected: filters.unackedOnly,
+              onSelected: (v) => onChanged(filters.copyWith(unackedOnly: v)),
+            ),
+          ],
           const SizedBox(width: 8),
           FilterChip(
             label: const Text('Show hidden'),
@@ -40,8 +43,11 @@ class FilterBar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           _MenuChip<SortMode>(
-            label: 'Sort: ${filters.sort.label}',
-            values: SortMode.values,
+            label: 'Sort: ${filters.sort.userFacingLabel}',
+            values: [
+              for (final mode in SortMode.values)
+                if (kShowAcknowledgements || !mode.isAcknowledgementSort) mode,
+            ],
             nameOf: (s) => s.label,
             onSelected: (s) => onChanged(filters.copyWith(sort: s)),
           ),
@@ -154,18 +160,21 @@ Future<AlarmFilters?> showFilterSheet({
                     draft = draft.copyWith(hideCleared: v);
                   }),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Unacked only'),
-                  value: draft.unackedOnly,
-                  onChanged: (v) => setState(() {
-                    draft = draft.copyWith(unackedOnly: v);
-                  }),
-                ),
+                if (kShowAcknowledgements)
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Unacked only'),
+                    value: draft.unackedOnly,
+                    onChanged: (v) => setState(() {
+                      draft = draft.copyWith(unackedOnly: v);
+                    }),
+                  ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Show hidden'),
-                  subtitle: const Text('Alarms you hid still stay acknowledged'),
+                  subtitle: kShowAcknowledgements
+                      ? const Text('Alarms you hid still stay acknowledged')
+                      : null,
                   value: draft.showHidden,
                   onChanged: (v) => setState(() {
                     draft = draft.copyWith(showHidden: v);

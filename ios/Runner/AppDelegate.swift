@@ -12,6 +12,8 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Mirrors kShowAcknowledgements in lib/acknowledgements.dart.
+    let showAcknowledgements = false
     let ack = UNNotificationAction(
       identifier: "ACK",
       title: "ACK",
@@ -19,7 +21,7 @@ import UserNotifications
     )
     let category = UNNotificationCategory(
       identifier: "NMS_ALARM",
-      actions: [ack],
+      actions: showAcknowledgements ? [ack] : [],
       intentIdentifiers: [],
       options: []
     )

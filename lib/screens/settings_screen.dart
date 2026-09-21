@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../acknowledgements.dart';
 import '../models/filters.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
@@ -133,28 +134,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   );
             },
           ),
-          SwitchListTile(
-            title: const Text('Unacked only by default'),
-            subtitle: const Text(
-              'When you open the alarm list, show only alarms that still need an ACK. Acknowledged alarms stay off the list until you turn this off.',
+          if (kShowAcknowledgements)
+            SwitchListTile(
+              title: const Text('Unacked only by default'),
+              subtitle: const Text(
+                'When you open the alarm list, show only alarms that still need an ACK. Acknowledged alarms stay off the list until you turn this off.',
+              ),
+              isThreeLine: true,
+              value: settings.filters.unackedOnly,
+              onChanged: (v) {
+                ref.read(settingsProvider.notifier).setFilters(
+                      settings.filters.copyWith(unackedOnly: v),
+                    );
+              },
             ),
-            isThreeLine: true,
-            value: settings.filters.unackedOnly,
-            onChanged: (v) {
-              ref.read(settingsProvider.notifier).setFilters(
-                    settings.filters.copyWith(unackedOnly: v),
-                  );
-            },
-          ),
           ListTile(
             title: const Text('Default sort'),
-            subtitle: Text(settings.filters.sort.label),
+            subtitle: Text(settings.filters.sort.userFacingLabel),
             onTap: () async {
+              final modes = [
+                for (final mode in SortMode.values)
+                  if (kShowAcknowledgements || !mode.isAcknowledgementSort)
+                    mode,
+              ];
               final next = await showModalBottomSheet<SortMode>(
                 context: context,
                 builder: (context) => ListView(
                   children: [
-                    for (final s in SortMode.values)
+                    for (final s in modes)
                       ListTile(
                         title: Text(s.label),
                         onTap: () => Navigator.pop(context, s),

@@ -2,13 +2,13 @@
 
 Flutter mobile app for field technicians. It talks only to the public NMS Alert Gateway technician API — not the admin UI.
 
-Technicians configure a server URL, sign in, receive high-priority FCM alarms for their own inbox, and acknowledge from the list, the detail screen, or the system notification.
+Technicians configure a server URL, sign in, and receive high-priority FCM alarms for their own inbox. Alarms are acknowledged automatically. The manual acknowledgement screens are still in the project, hidden while `kShowAcknowledgements` in `lib/acknowledgements.dart` is false.
 
 ## Features
 
 - Dark-first Material 3 list of this technician’s alarms
-- Hide cleared by default; two live timers (active + unacked) that freeze correctly
-- One-tap ACK on the card, swipe, detail, storm banner, site group, multi-select, and notification action
+- Hide cleared by default; two live timers (active + unacked) that freeze correctly. The unacked timer is hidden while `kShowAcknowledgements` is false.
+- One-tap ACK on the card, swipe, detail, storm banner, site group, multi-select, and notification action (hidden while `kShowAcknowledgements` is false)
 - Filter / sort / group-by on the list, persisted
 - Offline cache + queued ACKs
 - FCM on Android and iOS (`nms_alarms` channel, `NMS_ALARM` category)

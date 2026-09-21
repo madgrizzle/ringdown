@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../theme.dart';
 import '../utils/alarm_timers.dart';
@@ -36,28 +37,32 @@ class TimerRow extends StatelessWidget {
     final unackedColor =
         alarm.acked ? null : RingdownColors.unackedAmber;
     final style = Theme.of(context).textTheme.bodySmall;
+    final activeSpoken = alarm.isCleared
+        ? formatDurationSpoken(active, prefix: 'was active for')
+        : formatDurationSpoken(active, prefix: 'active for');
+    final unackedSpoken = alarm.acked
+        ? formatDurationSpoken(unacked, prefix: 'acknowledged in')
+        : formatDurationSpoken(unacked, prefix: 'unacknowledged for');
     return Semantics(
-      label: [
-        alarm.isCleared
-            ? formatDurationSpoken(active, prefix: 'was active for')
-            : formatDurationSpoken(active, prefix: 'active for'),
-        alarm.acked
-            ? formatDurationSpoken(unacked, prefix: 'acknowledged in')
-            : formatDurationSpoken(unacked, prefix: 'unacknowledged for'),
-      ].join('. '),
+      label: kShowAcknowledgements
+          ? '$activeSpoken. $unackedSpoken'
+          : activeSpoken,
       child: Wrap(
         spacing: 16,
         runSpacing: 4,
         children: [
           Text(activeLabel, style: style),
-          Text(
-            unackedLabel,
-            style: style?.copyWith(
-              color: unackedColor,
-              fontWeight: alarm.acked ? FontWeight.w400 : FontWeight.w700,
+          if (kShowAcknowledgements)
+            Text(
+              unackedLabel,
+              style: style?.copyWith(
+                color: unackedColor,
+                fontWeight: alarm.acked ? FontWeight.w400 : FontWeight.w700,
+              ),
             ),
-          ),
-          if (alarm.acked && (alarm.ackedBy ?? '').isNotEmpty)
+          if (kShowAcknowledgements &&
+              alarm.acked &&
+              (alarm.ackedBy ?? '').isNotEmpty)
             Text('by ${alarm.ackedBy}', style: style),
         ],
       ),

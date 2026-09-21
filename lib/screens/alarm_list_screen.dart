@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../models/filters.dart';
 import '../providers/alarms_provider.dart';
@@ -132,7 +133,9 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          alarm.canAck ? 'Hidden and acknowledged' : 'Alarm hidden',
+          kShowAcknowledgements && alarm.canAck
+              ? 'Hidden and acknowledged'
+              : 'Alarm hidden',
         ),
         action: SnackBarAction(
           label: 'Undo',
@@ -181,7 +184,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
           ],
         ),
         actions: [
-          if (unackedCount > 0)
+          if (kShowAcknowledgements && unackedCount > 0)
             Padding(
               padding: const EdgeInsets.only(right: 4),
               child: Badge(
@@ -196,24 +199,26 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                   ref.read(alarmsProvider.notifier).selectAllVisible(),
               icon: const Icon(Icons.select_all),
             ),
-            IconButton(
-              tooltip: 'Select all unacked visible',
-              onPressed: () =>
-                  ref.read(alarmsProvider.notifier).selectAllUnackedVisible(),
-              icon: const Icon(Icons.deselect),
-            ),
+            if (kShowAcknowledgements)
+              IconButton(
+                tooltip: 'Select all unacked visible',
+                onPressed: () =>
+                    ref.read(alarmsProvider.notifier).selectAllUnackedVisible(),
+                icon: const Icon(Icons.deselect),
+              ),
             IconButton(
               tooltip: 'Cancel',
               onPressed: () => ref.read(alarmsProvider.notifier).exitSelect(),
               icon: const Icon(Icons.close),
             ),
           ] else ...[
-            IconButton(
-              tooltip: 'Select',
-              onPressed: () =>
-                  ref.read(alarmsProvider.notifier).enterSelect(),
-              icon: const Icon(Icons.checklist),
-            ),
+            if (kShowAcknowledgements)
+              IconButton(
+                tooltip: 'Select',
+                onPressed: () =>
+                    ref.read(alarmsProvider.notifier).enterSelect(),
+                icon: const Icon(Icons.checklist),
+              ),
             IconButton(
               tooltip: 'Settings',
               onPressed: () => context.push('/settings'),
@@ -309,16 +314,17 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                     ref.read(alarmsProvider.notifier).exitSelect(),
                 child: const Text('Cancel'),
               ),
-              FilledButton(
-                onPressed: n == 0
-                    ? null
-                    : () => _confirmBulk(
-                          context,
-                          message: 'ACK $n selected alarms?',
-                          ids: alarms.selected.toList(),
-                        ),
-                child: const Text('ACK selected'),
-              ),
+              if (kShowAcknowledgements)
+                FilledButton(
+                  onPressed: n == 0
+                      ? null
+                      : () => _confirmBulk(
+                            context,
+                            message: 'ACK $n selected alarms?',
+                            ids: alarms.selected.toList(),
+                          ),
+                  child: const Text('ACK selected'),
+                ),
             ],
           ),
         ),
@@ -417,7 +423,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Badge(label: Text('${group.length}')),
-                  if (unacked.isNotEmpty)
+                  if (kShowAcknowledgements && unacked.isNotEmpty)
                     TextButton(
                       onPressed: () => _confirmBulk(
                         context,
@@ -460,8 +466,11 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       onHide: () => _hide(context, alarm),
       onUnhide: () => _unhide(context, alarm),
       onOpen: () => context.push('/alarms/${alarm.id}'),
-      onLongPress: () =>
-          ref.read(alarmsProvider.notifier).enterSelect(firstId: alarm.id),
+      onLongPress: kShowAcknowledgements
+          ? () => ref
+              .read(alarmsProvider.notifier)
+              .enterSelect(firstId: alarm.id)
+          : null,
       onToggleSelect: () =>
           ref.read(alarmsProvider.notifier).toggleSelected(alarm.id),
     );

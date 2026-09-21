@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../utils/alarm_timers.dart';
 import '../utils/duration_format.dart';
@@ -26,10 +27,13 @@ class SummaryStrip extends StatelessWidget {
     final oldestText = oldest == null
         ? 'none'
         : formatCompactDuration(oldest);
+    final summary = kShowAcknowledgements
+        ? '$active active · $unacked unacked · oldest unacked $oldestText'
+        : '$active active';
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
-        '$active active · $unacked unacked · oldest unacked $oldestText',
+        summary,
         style: Theme.of(context).textTheme.bodySmall,
       ),
     );
@@ -50,8 +54,18 @@ class StormBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final message = Text('Burst: $count new at $siteId');
+    if (!kShowAcknowledgements) {
+      return Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Align(alignment: Alignment.centerLeft, child: message),
+        ),
+      );
+    }
     return MaterialBanner(
-      content: Text('Burst: $count new at $siteId'),
+      content: message,
       actions: [
         TextButton(
           onPressed: onAckAll,

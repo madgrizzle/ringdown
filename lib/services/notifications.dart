@@ -9,6 +9,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../acknowledgements.dart';
 import 'ack_queue.dart';
 import 'api_client.dart';
 
@@ -30,6 +31,13 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   } catch (_) {}
   // A `notification` payload is already shown by the OS. Showing another
   // local notification is what produced duplicate banners.
+  final id = alarmIdFromData(message.data);
+  final status = message.data['status']?.toString();
+  final state = message.data['state']?.toString();
+  final cleared = status == 'N' || state == 'cleared';
+  if (id != null && !kShowAcknowledgements && !cleared) {
+    await ackFromBackground(id, onlyQueueWhenOffline: true);
+  }
   if (message.notification != null) return;
   await NotificationService.showLocalFromMessage(message);
 }
@@ -43,7 +51,10 @@ void onBackgroundNotificationResponse(NotificationResponse response) {
 }
 
 @pragma('vm:entry-point')
-Future<void> ackFromBackground(int alarmId) async {
+Future<void> ackFromBackground(
+  int alarmId, {
+  bool onlyQueueWhenOffline = false,
+}) async {
   try {
     const storage = FlutterSecureStorage();
     var access = await storage.read(key: 'access_token');
@@ -67,6 +78,12 @@ Future<void> ackFromBackground(int alarmId) async {
     );
     try {
       await dio.ack(alarmId);
+    } on ApiException catch (e) {
+      if (onlyQueueWhenOffline) {
+        if (e.statusCode == null) await _enqueue(alarmId);
+      } else {
+        await _enqueue(alarmId);
+      }
     } catch (_) {
       await _enqueue(alarmId);
     }
@@ -100,6 +117,7 @@ class NotificationService {
 
   AlarmTapCallback? onTap;
   AlarmAckCallback? onAck;
+  AlarmAckCallback? onIncomingAlarm;
   RefreshCallback? onRefresh;
 
   bool firebaseReady = false;
@@ -124,7 +142,8 @@ class NotificationService {
         DarwinNotificationCategory(
           nmsAlarmCategory,
           actions: [
-            DarwinNotificationAction.plain(ackActionId, 'ACK'),
+            if (kShowAcknowledgements)
+              DarwinNotificationAction.plain(ackActionId, 'ACK'),
           ],
         ),
       ],
@@ -150,6 +169,13 @@ class NotificationService {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
       FirebaseMessaging.onMessage.listen((message) async {
         onRefresh?.call();
+        final deliveredId = alarmIdFromData(message.data);
+        final status = message.data['status']?.toString();
+        final state = message.data['state']?.toString();
+        final cleared = status == 'N' || state == 'cleared';
+        if (deliveredId != null && !kShowAcknowledgements && !cleared) {
+          onIncomingAlarm?.call(deliveredId);
+        }
         // iOS presents the APNs banner via AppDelegate.willPresent. Showing
         // another local notification would duplicate it.
         if (Platform.isIOS && message.notification != null) return;
@@ -325,14 +351,16 @@ class NotificationService {
       icon: '@drawable/ic_stat_ringdown',
       tag: id.toString(),
       category: AndroidNotificationCategory.alarm,
-      actions: [
-        const AndroidNotificationAction(
-          ackActionId,
-          'ACK',
-          showsUserInterface: false,
-          cancelNotification: true,
-        ),
-      ],
+      actions: kShowAcknowledgements
+          ? const [
+              AndroidNotificationAction(
+                ackActionId,
+                'ACK',
+                showsUserInterface: false,
+                cancelNotification: true,
+              ),
+            ]
+          : const <AndroidNotificationAction>[],
     );
     final darwin = DarwinNotificationDetails(
       presentAlert: true,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../providers/alarms_provider.dart';
 import '../providers/settings_provider.dart';
@@ -82,7 +83,9 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          alarm.canAck ? 'Hidden and acknowledged' : 'Alarm hidden',
+          kShowAcknowledgements && alarm.canAck
+              ? 'Hidden and acknowledged'
+              : 'Alarm hidden',
         ),
       ),
     );
@@ -155,7 +158,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
           : alarm == null
               ? Center(child: Text(_error ?? 'Alarm not found'))
               : _body(context, alarm, now, freeze[alarm.id]),
-      bottomNavigationBar: alarm != null && alarm.canAck
+      bottomNavigationBar: kShowAcknowledgements && alarm != null && alarm.canAck
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -213,7 +216,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
           runSpacing: 8,
           children: [
             StatusChip(alarm: alarm),
-            AckChip(alarm: alarm),
+            if (kShowAcknowledgements) AckChip(alarm: alarm),
             Chip(label: Text('Priority ${alarm.priority}')),
             if ((alarm.aid ?? '').isNotEmpty) Chip(label: Text('AID ${alarm.aid}')),
           ],
@@ -232,7 +235,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
         ],
-        if (alarm.acked) ...[
+        if (kShowAcknowledgements && alarm.acked) ...[
           const SizedBox(height: 8),
           Text(
             [

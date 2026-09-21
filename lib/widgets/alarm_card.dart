@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../theme.dart';
 import 'status_chips.dart';
@@ -37,6 +38,11 @@ class AlarmCard extends StatelessWidget {
 
   Color get _stripe {
     if (hidden) return const Color(0xFF78909C);
+    if (!kShowAcknowledgements) {
+      return alarm.isActive
+          ? RingdownColors.activeUnacked
+          : RingdownColors.cleared;
+    }
     if (alarm.isActive && !alarm.acked) return RingdownColors.activeUnacked;
     if (alarm.isActive && alarm.acked) return RingdownColors.activeAcked;
     if (alarm.isCleared && !alarm.acked) return RingdownColors.unackedAmber;
@@ -48,7 +54,7 @@ class AlarmCard extends StatelessWidget {
     final muted = alarm.isCleared || hidden;
     final card = Card(
       color: Theme.of(context).cardTheme.color?.withValues(
-            alpha: muted && alarm.acked ? 0.7 : 1,
+            alpha: kShowAcknowledgements && muted && alarm.acked ? 0.7 : 1,
           ),
       child: InkWell(
         onTap: selecting ? onToggleSelect : onOpen,
@@ -102,7 +108,7 @@ class AlarmCard extends StatelessWidget {
                         runSpacing: 4,
                         children: [
                           StatusChip(alarm: alarm),
-                          AckChip(alarm: alarm),
+                          if (kShowAcknowledgements) AckChip(alarm: alarm),
                           if (hidden)
                             Chip(
                               visualDensity: VisualDensity.compact,
@@ -134,7 +140,7 @@ class AlarmCard extends StatelessWidget {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (alarm.canAck)
+                      if (kShowAcknowledgements && alarm.canAck)
                         Semantics(
                           button: true,
                           label: 'Acknowledge alarm at ${alarm.siteId}',
@@ -169,9 +175,10 @@ class AlarmCard extends StatelessWidget {
 
     if (selecting) return card;
 
+    final canSwipeAck = kShowAcknowledgements && alarm.canAck;
     return Dismissible(
       key: ValueKey('swipe-${alarm.id}'),
-      direction: alarm.canAck
+      direction: canSwipeAck
           ? DismissDirection.horizontal
           : DismissDirection.startToEnd,
       confirmDismiss: (direction) async {
@@ -195,15 +202,17 @@ class AlarmCard extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
         ),
       ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        color: RingdownColors.cleared.withValues(alpha: 0.35),
-        child: const Text(
-          'ACK',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-        ),
-      ),
+      secondaryBackground: canSwipeAck
+          ? Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              color: RingdownColors.cleared.withValues(alpha: 0.35),
+              child: const Text(
+                'ACK',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            )
+          : const SizedBox.shrink(),
       child: card,
     );
   }

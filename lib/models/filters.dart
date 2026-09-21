@@ -1,3 +1,5 @@
+import '../acknowledgements.dart';
+
 enum SortMode {
   timeNewest,
   timeOldest,
@@ -15,6 +17,16 @@ enum SortMode {
 enum GroupBy { none, site, device }
 
 extension SortModeX on SortMode {
+  bool get isAcknowledgementSort =>
+      this == SortMode.unackedFirst || this == SortMode.longestUnacked;
+
+  /// Sort used while acknowledgement is hidden, without changing the saved choice.
+  SortMode get withoutAcknowledgement => switch (this) {
+        SortMode.unackedFirst => SortMode.timeNewest,
+        SortMode.longestUnacked => SortMode.longestActive,
+        _ => this,
+      };
+
   String get label => switch (this) {
         SortMode.timeNewest => 'Time (newest)',
         SortMode.timeOldest => 'Time (oldest)',
@@ -28,6 +40,12 @@ extension SortModeX on SortMode {
         SortMode.longestActive => 'Longest active',
         SortMode.longestUnacked => 'Longest unacked',
       };
+
+  /// Label shown in the interface. Acknowledgement sorts keep [label] in code.
+  String get userFacingLabel {
+    if (kShowAcknowledgements || !isAcknowledgementSort) return label;
+    return withoutAcknowledgement.label;
+  }
 
   bool get isClientSort => switch (this) {
         SortMode.siteThenDevice ||
