@@ -54,7 +54,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final server = ref.watch(authProvider).serverUrl ?? '';
     return Scaffold(
       appBar: AppBar(title: const Text('Sign in')),
       body: SafeArea(
@@ -67,18 +66,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    server,
+                    ApiClient.defaultBaseUrl,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () =>
-                          ref.read(authProvider.notifier).changeServer(),
-                      child: const Text('Change server'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 24),
                   TextFormField(
                     controller: _user,
                     autofillHints: const [AutofillHints.username],

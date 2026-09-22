@@ -7,7 +7,6 @@ import 'providers/auth_provider.dart';
 import 'screens/alarm_detail_screen.dart';
 import 'screens/alarm_list_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/server_url_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/splash_screen.dart';
 
@@ -32,7 +31,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       if (loc == '/splash') {
         return switch (auth.status) {
-          AuthStatus.needsServer => '/server',
           AuthStatus.needsLogin => '/login',
           AuthStatus.authenticated => () {
               final id = ref.read(pendingAlarmIdProvider);
@@ -46,12 +44,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         };
       }
       switch (auth.status) {
-        case AuthStatus.needsServer:
-          return loc == '/server' ? null : '/server';
         case AuthStatus.needsLogin:
           return loc == '/login' ? null : '/login';
         case AuthStatus.authenticated:
-          if (loc == '/login' || loc == '/server' || loc == '/splash') {
+          if (loc == '/login' || loc == '/splash') {
             final id = ref.read(pendingAlarmIdProvider);
             if (id != null) {
               ref.read(pendingAlarmIdProvider.notifier).state = null;
@@ -66,7 +62,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
-      GoRoute(path: '/server', builder: (context, state) => const ServerUrlScreen()),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/alarms',

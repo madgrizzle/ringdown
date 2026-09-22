@@ -59,15 +59,15 @@ Future<void> ackFromBackground(
     const storage = FlutterSecureStorage();
     var access = await storage.read(key: 'access_token');
     var refresh = await storage.read(key: 'refresh_token');
-    final url = await storage.read(key: 'server_url');
-    if (access == null || url == null) {
+    if ((access == null || access.isEmpty) &&
+        (refresh == null || refresh.isEmpty)) {
       await _enqueue(alarmId);
       return;
     }
     final dio = ApiClient(
       token: () => access,
       refreshToken: () => refresh,
-      baseUrl: () => url,
+      baseUrl: () => ApiClient.defaultBaseUrl,
       onTokens: (newAccess, newRefresh) async {
         access = newAccess;
         refresh = newRefresh;
@@ -307,6 +307,15 @@ class NotificationService {
       }
     });
     return token != null;
+  }
+
+  Future<String?> currentFcmToken() async {
+    if (!firebaseReady) return null;
+    try {
+      return await FirebaseMessaging.instance.getToken();
+    } catch (_) {
+      return null;
+    }
   }
 
   /// iOS requires an APNs token before FCM will issue a registration token.

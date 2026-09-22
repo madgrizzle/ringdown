@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/auth_state.dart';
@@ -22,23 +24,17 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> restore() async {
-    String? url;
     String? token;
     String? refresh;
     String? lastUser;
     try {
-      url = await _secure.readServerUrl();
       token = await _secure.readAccessToken();
       refresh = await _secure.readRefreshToken();
       lastUser = await _secure.readUsername() ?? _prefs.readLastUsername();
     } catch (e) {
-      state = const AuthState(status: AuthStatus.needsServer);
-      return;
-    }
-    if (url == null || url.isEmpty) {
-      state = AuthState(
-        status: AuthStatus.needsServer,
-        lastUsername: lastUser,
+      state = const AuthState(
+        status: AuthStatus.needsLogin,
+        serverUrl: ApiClient.defaultBaseUrl,
       );
       return;
     }
@@ -46,14 +42,14 @@ class AuthNotifier extends Notifier<AuthState> {
         (refresh == null || refresh.isEmpty)) {
       state = AuthState(
         status: AuthStatus.needsLogin,
-        serverUrl: url,
+        serverUrl: ApiClient.defaultBaseUrl,
         lastUsername: lastUser,
       );
       return;
     }
     state = AuthState(
       status: AuthStatus.authenticated,
-      serverUrl: url,
+      serverUrl: ApiClient.defaultBaseUrl,
       token: token,
       refreshToken: refresh,
       lastUsername: lastUser,
@@ -77,32 +73,19 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  void changeServer() {
-    state = AuthState(
-      status: AuthStatus.needsServer,
-      serverUrl: state.serverUrl,
-      lastUsername: state.lastUsername ?? state.username,
-    );
-  }
-
-  Future<void> saveServerUrl(String raw) async {
-    final url = ApiClient.normalizeBaseUrl(raw);
-    await _api.checkHealth(url);
-    await _secure.writeServerUrl(url);
-    final lastUser =
-        await _secure.readUsername() ?? _prefs.readLastUsername();
-    state = AuthState(
-      status: AuthStatus.needsLogin,
-      serverUrl: url,
-      lastUsername: lastUser,
-    );
-  }
-
   Future<void> login({
     required String username,
     required String password,
   }) async {
-    final tokens = await _api.login(username: username, password: password);
+    final deviceId = await _secure.readOrCreateDeviceId();
+    final ios = Platform.isIOS;
+    final tokens = await _api.login(
+      username: username,
+      password: password,
+      deviceId: deviceId,
+      deviceName: ios ? 'iOS' : 'Android',
+      platform: ios ? 'ios' : 'android',
+    );
     await applyTokens(
       access: tokens.accessToken,
       refresh: tokens.refreshToken,
@@ -111,6 +94,7 @@ class AuthNotifier extends Notifier<AuthState> {
     await _prefs.writeLastUsername(username);
     state = state.copyWith(
       status: AuthStatus.authenticated,
+      serverUrl: ApiClient.defaultBaseUrl,
       username: username,
       lastUsername: username,
     );
@@ -125,10 +109,20 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    final refresh = state.refreshToken;
+    String? fcm;
+    try {
+      fcm = await _notify.currentFcmToken();
+    } catch (_) {}
+    if (refresh != null && refresh.isNotEmpty) {
+      try {
+        await _api.logout(refreshToken: refresh, fcmToken: fcm);
+      } catch (_) {}
+    }
     await _secure.clearSession();
     state = AuthState(
       status: AuthStatus.needsLogin,
-      serverUrl: state.serverUrl,
+      serverUrl: ApiClient.defaultBaseUrl,
       lastUsername: state.lastUsername ?? state.username,
     );
   }
@@ -154,7 +148,7 @@ class AuthNotifier extends Notifier<AuthState> {
       await _secure.clearSession();
       state = AuthState(
         status: AuthStatus.needsLogin,
-        serverUrl: state.serverUrl,
+        serverUrl: ApiClient.defaultBaseUrl,
         lastUsername: state.lastUsername ?? state.username,
       );
     } finally {
@@ -184,7 +178,7 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(
     token: () => ref.read(authProvider).token,
     refreshToken: () => ref.read(authProvider).refreshToken,
-    baseUrl: () => ref.read(authProvider).serverUrl,
+    baseUrl: () => ApiClient.defaultBaseUrl,
     onTokens: (access, refresh) {
       return ref.read(authProvider.notifier).applyTokens(
             access: access,

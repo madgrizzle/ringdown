@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class SecureStore {
@@ -12,14 +14,10 @@ class SecureStore {
 
   final FlutterSecureStorage _storage;
 
-  static const _serverUrl = 'server_url';
   static const _accessToken = 'access_token';
   static const _refreshToken = 'refresh_token';
   static const _username = 'username';
-
-  Future<String?> readServerUrl() => _storage.read(key: _serverUrl);
-  Future<void> writeServerUrl(String url) =>
-      _storage.write(key: _serverUrl, value: url);
+  static const _deviceId = 'device_id';
 
   Future<String?> readAccessToken() => _storage.read(key: _accessToken);
   Future<void> writeAccessToken(String token) =>
@@ -32,6 +30,19 @@ class SecureStore {
   Future<String?> readUsername() => _storage.read(key: _username);
   Future<void> writeUsername(String username) =>
       _storage.write(key: _username, value: username);
+
+  /// Stable id for this install. A new sign-in replaces the previous session
+  /// for the same id, so one phone does not pile up sessions.
+  Future<String> readOrCreateDeviceId() async {
+    final existing = await _storage.read(key: _deviceId);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final random = Random.secure();
+    final id = List<int>.generate(16, (_) => random.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    await _storage.write(key: _deviceId, value: id);
+    return id;
+  }
 
   Future<void> clearSession() async {
     await _storage.delete(key: _accessToken);

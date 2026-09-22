@@ -106,13 +106,6 @@ class ApiClient {
 
   static const defaultBaseUrl = 'https://api.phionalerter.com';
 
-  static String normalizeBaseUrl(String raw) {
-    var url = raw.trim();
-    if (url.endsWith('/')) url = url.substring(0, url.length - 1);
-    if (!url.contains('://')) url = 'https://$url';
-    return url;
-  }
-
   Future<Map<String, dynamic>> appVersion() async {
     try {
       final res = await _dio.get<Map<String, dynamic>>(
@@ -125,30 +118,24 @@ class ApiClient {
     }
   }
 
-  Future<void> checkHealth(String serverUrl) async {
-    final url = normalizeBaseUrl(serverUrl);
-    try {
-      final res = await _dio.get<Map<String, dynamic>>(
-        '$url/health',
-        options: Options(extra: {'skipAuth': true}),
-      );
-      final status = res.data?['status']?.toString().toLowerCase();
-      if (status != 'healthy') {
-        throw ApiException('Server is not healthy');
-      }
-    } on DioException catch (e) {
-      throw ApiException(_message(e), statusCode: e.response?.statusCode);
-    }
-  }
-
   Future<({String accessToken, String? refreshToken})> login({
     required String username,
     required String password,
+    String? deviceId,
+    String? deviceName,
+    String? platform,
   }) async {
     try {
       final res = await _dio.post<Map<String, dynamic>>(
         '/auth/login',
-        data: {'username': username, 'password': password},
+        data: {
+          'username': username,
+          'password': password,
+          if (deviceId != null && deviceId.isNotEmpty) 'device_id': deviceId,
+          if (deviceName != null && deviceName.isNotEmpty)
+            'device_name': deviceName,
+          if (platform != null && platform.isNotEmpty) 'platform': platform,
+        },
         options: Options(extra: {'skipAuth': true}),
       );
       final data = res.data ?? const {};
@@ -182,6 +169,24 @@ class ApiClient {
       return (
         accessToken: access,
         refreshToken: data['refresh_token'] as String?,
+      );
+    } on DioException catch (e) {
+      throw ApiException(_message(e), statusCode: e.response?.statusCode);
+    }
+  }
+
+  Future<void> logout({
+    required String refreshToken,
+    String? fcmToken,
+  }) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/auth/logout',
+        data: {
+          'refresh_token': refreshToken,
+          if (fcmToken != null && fcmToken.isNotEmpty) 'fcm_token': fcmToken,
+        },
+        options: Options(extra: {'skipAuth': true, 'skipRefresh': true}),
       );
     } on DioException catch (e) {
       throw ApiException(_message(e), statusCode: e.response?.statusCode);

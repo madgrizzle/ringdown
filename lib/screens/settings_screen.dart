@@ -29,49 +29,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
   }
 
-  Future<void> _editServer() async {
-    final current = ref.read(authProvider).serverUrl ?? '';
-    final controller = TextEditingController(text: current);
-    final next = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Server URL'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.url,
-          decoration: const InputDecoration(
-            hintText: 'https://api.phionalerter.com',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Check & save'),
-          ),
-        ],
-      ),
-    );
-    if (next == null || next.trim().isEmpty) return;
-    try {
-      await ref.read(authProvider.notifier).saveServerUrl(next);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Server URL saved. Sign in again.')),
-        );
-      }
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -88,11 +45,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Inbox'),
             subtitle: Text(auth.inboxEmail ?? '—'),
           ),
-          ListTile(
-            title: const Text('Server URL'),
-            subtitle: Text(auth.serverUrl ?? '—'),
-            trailing: const Icon(Icons.edit_outlined),
-            onTap: _editServer,
+          const ListTile(
+            title: Text('Server'),
+            subtitle: Text(ApiClient.defaultBaseUrl),
           ),
           const Divider(),
           const ListTile(title: Text('Theme')),

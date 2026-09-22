@@ -1,4 +1,4 @@
-enum AuthStatus { unknown, needsServer, needsLogin, authenticated }
+enum AuthStatus { unknown, needsLogin, authenticated }
 
 class AuthState {
   const AuthState({
