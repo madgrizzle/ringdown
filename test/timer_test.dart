@@ -10,6 +10,7 @@ Alarm _alarm({
   String status = 'Y',
   bool acked = false,
   DateTime? ackedAt,
+  DateTime? clearedAt,
 }) {
   return Alarm(
     id: 1,
@@ -23,6 +24,7 @@ Alarm _alarm({
     receivedAt: receivedAt,
     acked: acked,
     ackedAt: ackedAt,
+    clearedAt: clearedAt,
   );
 }
 
@@ -77,6 +79,31 @@ void main() {
       unackedDuration(alarm: a, now: later),
       const Duration(minutes: 2, seconds: 18),
     );
+  });
+
+  test('cleared alarm freezes at the gateway clear time', () {
+    final alarmAt = DateTime.utc(2026, 9, 22, 17, 50);
+    final clearedAt = DateTime.utc(2026, 9, 22, 18, 5);
+    final later = DateTime.utc(2026, 9, 22, 23, 0);
+    final a = _alarm(
+      alarmAt: alarmAt,
+      receivedAt: DateTime.utc(2026, 9, 22, 18, 1),
+      state: 'cleared',
+      status: 'N',
+      clearedAt: clearedAt,
+    );
+    expect(
+      activeDuration(alarm: a, now: later, clearedFreezeAt: later),
+      const Duration(minutes: 15),
+    );
+  });
+
+  test('eastern alarm offset is the UTC instant, not the wall clock', () {
+    final alarmAt = Alarm.parseUtc('2026-09-22T13:50:00-04:00');
+    final received = Alarm.parseUtc('2026-09-22T18:01:00Z');
+    expect(alarmAt, DateTime.utc(2026, 9, 22, 17, 50));
+    expect(received, DateTime.utc(2026, 9, 22, 18, 1));
+    expect(received.difference(alarmAt), const Duration(minutes: 11));
   });
 
   test('ACK does not freeze the active timer', () {

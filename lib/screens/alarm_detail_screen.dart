@@ -257,6 +257,12 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
           title: const Text('Received'),
           subtitle: Text(fmt.format(alarm.receivedAt.toLocal())),
         ),
+        if (alarm.clearedAt != null)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Cleared'),
+            subtitle: Text(fmt.format(alarm.clearedAt!.toLocal())),
+          ),
         if ((alarm.rawSubject ?? '').isNotEmpty ||
             (alarm.rawBody ?? '').isNotEmpty)
           ExpansionTile(

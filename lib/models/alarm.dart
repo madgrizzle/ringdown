@@ -9,6 +9,7 @@ class Alarm {
     required this.priority,
     required this.alarmAt,
     required this.receivedAt,
+    this.clearedAt,
     required this.acked,
     this.aid,
     this.ackedBy,
@@ -33,6 +34,9 @@ class Alarm {
   final String? aid;
   final DateTime alarmAt;
   final DateTime receivedAt;
+
+  /// When the gateway recorded the clear. Null while the alarm is still active.
+  final DateTime? clearedAt;
   final bool acked;
   final String? ackedBy;
   final DateTime? ackedAt;
@@ -62,6 +66,7 @@ class Alarm {
       aid: json['aid'] as String?,
       alarmAt: parseUtc(json['alarm_at']),
       receivedAt: parseUtc(json['received_at']),
+      clearedAt: json['cleared_at'] == null ? null : parseUtc(json['cleared_at']),
       acked: json['acked'] as bool? ?? false,
       ackedBy: json['acked_by'] as String?,
       ackedAt: json['acked_at'] == null ? null : parseUtc(json['acked_at']),
@@ -83,6 +88,7 @@ class Alarm {
         'aid': aid,
         'alarm_at': alarmAt.toIso8601String(),
         'received_at': receivedAt.toIso8601String(),
+        'cleared_at': clearedAt?.toIso8601String(),
         'acked': acked,
         'acked_by': ackedBy,
         'acked_at': ackedAt?.toIso8601String(),
@@ -110,6 +116,7 @@ class Alarm {
       aid: aid,
       alarmAt: alarmAt,
       receivedAt: receivedAt,
+      clearedAt: clearedAt,
       acked: acked ?? this.acked,
       ackedBy: ackedBy ?? this.ackedBy,
       ackedAt: ackedAt ?? this.ackedAt,
