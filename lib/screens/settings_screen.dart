@@ -4,8 +4,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../acknowledgements.dart';
 import '../models/filters.dart';
+import '../providers/alarms_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/alarm_sync.dart';
 import '../providers/update_provider.dart';
 import '../services/api_client.dart';
 
@@ -18,6 +20,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _version = '';
+  double? _historyDrag;
 
   @override
   void initState() {
@@ -33,6 +36,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
     final settings = ref.watch(settingsProvider);
+    final historyDays = clampAlarmHistoryDays(
+      (_historyDrag ?? settings.historyDays.toDouble()).round(),
+    );
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -79,13 +85,39 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           SwitchListTile(
             title: const Text('Hide cleared by default'),
             subtitle: const Text(
-              'When you open the alarm list, skip alarms that have already returned to normal. Turn this off if you still want to see those until you hide them yourself.',
+              'Skip alarms that have already returned to normal. Turn this off to show them again.',
             ),
             isThreeLine: true,
             value: settings.filters.hideCleared,
             onChanged: (v) {
               ref.read(settingsProvider.notifier).setFilters(
                     settings.filters.copyWith(hideCleared: v),
+                  );
+            },
+          ),
+          ListTile(
+            title: const Text('Keep cleared alarms'),
+            subtitle: Text(
+              '$historyDays ${historyDays == 1 ? 'day' : 'days'}. '
+              'Alarms still in alarm stay until they clear.',
+            ),
+          ),
+          Slider(
+            min: minAlarmHistoryDays.toDouble(),
+            max: maxAlarmHistoryDays.toDouble(),
+            divisions: maxAlarmHistoryDays - minAlarmHistoryDays,
+            value: historyDays.toDouble(),
+            label: '$historyDays',
+            onChanged: (value) => setState(() => _historyDrag = value),
+            onChangeEnd: (value) async {
+              final days = clampAlarmHistoryDays(value.round());
+              final previous = settings.historyDays;
+              setState(() => _historyDrag = null);
+              if (days == previous) return;
+              await ref.read(settingsProvider.notifier).setHistoryDays(days);
+              if (!mounted) return;
+              await ref.read(alarmsProvider.notifier).historyWindowChanged(
+                    expanded: days > previous,
                   );
             },
           ),

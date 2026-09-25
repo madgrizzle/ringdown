@@ -51,6 +51,14 @@ class Alarm {
   /// Server currently accepts ACK only on in-alarm (Y) rows.
   bool get canAck => !acked && status == 'Y';
 
+  /// Latest receive, clear, or acknowledge time. Matches the server sync order.
+  DateTime get changeTime {
+    var latest = receivedAt;
+    if (clearedAt != null && clearedAt!.isAfter(latest)) latest = clearedAt!;
+    if (ackedAt != null && ackedAt!.isAfter(latest)) latest = ackedAt!;
+    return latest;
+  }
+
   factory Alarm.fromJson(Map<String, dynamic> json) {
     final status = (json['status'] as String? ?? 'Y').toUpperCase();
     final state = (json['state'] as String?) ??
@@ -165,12 +173,20 @@ class AlarmListPage {
     required this.total,
     required this.page,
     required this.pageSize,
+    this.serverTime,
+    this.hasMore = false,
+    this.nextAfterTime,
+    this.nextAfterId,
   });
 
   final List<Alarm> items;
   final int total;
   final int page;
   final int pageSize;
+  final DateTime? serverTime;
+  final bool hasMore;
+  final DateTime? nextAfterTime;
+  final int? nextAfterId;
 
   factory AlarmListPage.fromJson(Map<String, dynamic> json) {
     final raw = json['items'] as List<dynamic>? ?? const [];
@@ -181,6 +197,14 @@ class AlarmListPage {
       total: json['total'] as int? ?? raw.length,
       page: json['page'] as int? ?? 1,
       pageSize: json['page_size'] as int? ?? raw.length,
+      serverTime: json['server_time'] == null
+          ? null
+          : Alarm.parseUtc(json['server_time']),
+      hasMore: json['has_more'] as bool? ?? false,
+      nextAfterTime: json['next_after_time'] == null
+          ? null
+          : Alarm.parseUtc(json['next_after_time']),
+      nextAfterId: json['next_after_id'] as int?,
     );
   }
 }

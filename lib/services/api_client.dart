@@ -250,6 +250,38 @@ class ApiClient {
     }
   }
 
+  /// One page of the change cursor. The first sync sends [lookbackHours].
+  /// Later syncs send [changedSince], the server time from the previous sync.
+  Future<AlarmListPage> syncAlarms({
+    DateTime? changedSince,
+    int? lookbackHours,
+    DateTime? afterTime,
+    int? afterId,
+    int pageSize = 100,
+  }) async {
+    final query = <String, dynamic>{
+      'page_size': pageSize,
+    };
+    if (changedSince != null) {
+      query['changed_since'] = changedSince.toUtc().toIso8601String();
+    } else if (lookbackHours != null) {
+      query['lookback_hours'] = lookbackHours;
+    }
+    if (afterTime != null) {
+      query['after_time'] = afterTime.toUtc().toIso8601String();
+    }
+    if (afterId != null) query['after_id'] = afterId;
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/alarms',
+        queryParameters: query,
+      );
+      return AlarmListPage.fromJson(res.data ?? const {});
+    } on DioException catch (e) {
+      throw ApiException(_message(e), statusCode: e.response?.statusCode);
+    }
+  }
+
   Future<Alarm> getAlarm(int id) async {
     try {
       final res = await _dio.get<Map<String, dynamic>>('/alarms/$id');

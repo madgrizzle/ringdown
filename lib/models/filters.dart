@@ -1,4 +1,5 @@
 import '../acknowledgements.dart';
+import '../priority_category.dart';
 
 enum SortMode {
   timeNewest,
@@ -80,7 +81,7 @@ extension GroupByX on GroupBy {
 
 class AlarmFilters {
   const AlarmFilters({
-    this.hideCleared = true,
+    this.hideCleared = false,
     this.unackedOnly = false,
     this.showHidden = false,
     this.siteContains = '',
@@ -88,6 +89,7 @@ class AlarmFilters {
     this.search = '',
     this.sort = SortMode.unackedFirst,
     this.groupBy = GroupBy.none,
+    this.priorityFloor = PriorityFloor.any,
   });
 
   final bool hideCleared;
@@ -99,6 +101,9 @@ class AlarmFilters {
   final SortMode sort;
   final GroupBy groupBy;
 
+  /// Keep alarms at this urgency and anything more urgent.
+  final PriorityFloor priorityFloor;
+
   AlarmFilters copyWith({
     bool? hideCleared,
     bool? unackedOnly,
@@ -108,6 +113,7 @@ class AlarmFilters {
     String? search,
     SortMode? sort,
     GroupBy? groupBy,
+    PriorityFloor? priorityFloor,
   }) {
     return AlarmFilters(
       hideCleared: hideCleared ?? this.hideCleared,
@@ -118,6 +124,7 @@ class AlarmFilters {
       search: search ?? this.search,
       sort: sort ?? this.sort,
       groupBy: groupBy ?? this.groupBy,
+      priorityFloor: priorityFloor ?? this.priorityFloor,
     );
   }
 
@@ -130,11 +137,12 @@ class AlarmFilters {
         'search': search,
         'sort': sort.name,
         'groupBy': groupBy.name,
+        'priorityFloor': priorityFloor.name,
       };
 
   factory AlarmFilters.fromJson(Map<String, dynamic> json) {
     return AlarmFilters(
-      hideCleared: json['hideCleared'] as bool? ?? true,
+      hideCleared: json['hideCleared'] as bool? ?? false,
       unackedOnly: json['unackedOnly'] as bool? ?? false,
       showHidden: json['showHidden'] as bool? ?? false,
       siteContains: json['siteContains'] as String? ?? '',
@@ -147,6 +155,10 @@ class AlarmFilters {
       groupBy: GroupBy.values.firstWhere(
         (e) => e.name == json['groupBy'],
         orElse: () => GroupBy.none,
+      ),
+      priorityFloor: PriorityFloor.values.firstWhere(
+        (e) => e.name == json['priorityFloor'],
+        orElse: () => PriorityFloor.any,
       ),
     );
   }

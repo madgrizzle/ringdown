@@ -10,12 +10,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../acknowledgements.dart';
+import '../priority_category.dart';
 import 'ack_queue.dart';
 import 'api_client.dart';
 
 const nmsAlarmsChannelId = 'nms_alarms';
 const nmsAlarmCategory = 'NMS_ALARM';
 const ackActionId = 'ACK';
+const summaryNotificationId = 900001;
+const summaryPayload = 'summary';
 
 const _settingsChannel = MethodChannel('ringdown/settings');
 const _notifyChannel = MethodChannel('ringdown/notifications');
@@ -23,6 +26,7 @@ const _notifyChannel = MethodChannel('ringdown/notifications');
 typedef AlarmTapCallback = void Function(int alarmId);
 typedef AlarmAckCallback = void Function(int alarmId);
 typedef RefreshCallback = void Function();
+typedef SummaryTapCallback = void Function();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -35,7 +39,10 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   final status = message.data['status']?.toString();
   final state = message.data['state']?.toString();
   final cleared = status == 'N' || state == 'cleared';
-  if (id != null && !kShowAcknowledgements && !cleared) {
+  if (!isSummaryMessage(message.data) &&
+      id != null &&
+      !kShowAcknowledgements &&
+      !cleared) {
     await ackFromBackground(id, onlyQueueWhenOffline: true);
   }
   if (message.notification != null) return;
@@ -103,6 +110,9 @@ int? _alarmIdFromResponse(NotificationResponse response) {
   return int.tryParse(payload);
 }
 
+bool isSummaryMessage(Map<String, dynamic> data) =>
+    data['summary']?.toString() == '1';
+
 int? alarmIdFromData(Map<String, dynamic> data) {
   final raw = data['alarm_id']?.toString();
   if (raw == null) return null;
@@ -116,6 +126,7 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   AlarmTapCallback? onTap;
+  SummaryTapCallback? onSummary;
   AlarmAckCallback? onAck;
   AlarmAckCallback? onIncomingAlarm;
   RefreshCallback? onRefresh;
@@ -173,7 +184,10 @@ class NotificationService {
         final status = message.data['status']?.toString();
         final state = message.data['state']?.toString();
         final cleared = status == 'N' || state == 'cleared';
-        if (deliveredId != null && !kShowAcknowledgements && !cleared) {
+        if (!isSummaryMessage(message.data) &&
+            deliveredId != null &&
+            !kShowAcknowledgements &&
+            !cleared) {
           onIncomingAlarm?.call(deliveredId);
         }
         // iOS presents the APNs banner via AppDelegate.willPresent. Showing
@@ -182,15 +196,13 @@ class NotificationService {
         await showLocalFromMessage(message, plugin: _plugin);
       });
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
-        final id = alarmIdFromData(message.data);
-        if (id != null) onTap?.call(id);
+        _openMessage(message.data);
       });
       final initial = await FirebaseMessaging.instance
           .getInitialMessage()
           .timeout(const Duration(seconds: 3), onTimeout: () => null);
       if (initial != null) {
-        final id = alarmIdFromData(initial.data);
-        if (id != null) onTap?.call(id);
+        _openMessage(initial.data);
       }
     } catch (e) {
       debugPrint('Firebase not configured: $e');
@@ -214,7 +226,20 @@ class NotificationService {
     }
   }
 
+  void _openMessage(Map<String, dynamic> data) {
+    if (isSummaryMessage(data)) {
+      onSummary?.call();
+      return;
+    }
+    final id = alarmIdFromData(data);
+    if (id != null) onTap?.call(id);
+  }
+
   void _onResponse(NotificationResponse response) {
+    if (response.payload == summaryPayload) {
+      onSummary?.call();
+      return;
+    }
     final id = _alarmIdFromResponse(response);
     if (id == null) return;
     if (response.actionId == ackActionId) {
@@ -341,6 +366,33 @@ class NotificationService {
   }) async {
     final local = plugin ?? FlutterLocalNotificationsPlugin();
     final data = message.data;
+    if (isSummaryMessage(data)) {
+      final title = data['title']?.toString() ??
+          '${data['count'] ?? ''} other alarms in the last 20 seconds';
+      final body = data['body']?.toString() ?? 'Open the app to review them';
+      final android = AndroidNotificationDetails(
+        nmsAlarmsChannelId,
+        'NMS Alarms',
+        channelDescription: 'Telenium NMS alarm notifications',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: '@drawable/ic_stat_ringdown',
+        tag: 'other-alarms',
+      );
+      final darwin = DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        threadIdentifier: 'other-alarms',
+      );
+      await local.show(
+        summaryNotificationId,
+        title,
+        body,
+        NotificationDetails(android: android, iOS: darwin),
+        payload: summaryPayload,
+      );
+      return;
+    }
     final id = alarmIdFromData(data);
     if (id == null) return;
     final inAlarm = data['status'] == 'Y' || data['state'] == 'active';
@@ -351,6 +403,9 @@ class NotificationService {
         data['body'] ??
         '${data['device'] ?? ''} — ${inAlarm ? 'Active' : 'Cleared'}';
 
+    final priority = int.tryParse(data['priority']?.toString() ?? '') ?? 20;
+    final accent = colorFromHex(data['color']?.toString()) ??
+        priorityCategory(priority).color;
     final android = AndroidNotificationDetails(
       nmsAlarmsChannelId,
       'NMS Alarms',
@@ -358,6 +413,7 @@ class NotificationService {
       importance: inAlarm ? Importance.high : Importance.defaultImportance,
       priority: inAlarm ? Priority.high : Priority.defaultPriority,
       icon: '@drawable/ic_stat_ringdown',
+      color: accent,
       tag: id.toString(),
       category: AndroidNotificationCategory.alarm,
       actions: kShowAcknowledgements

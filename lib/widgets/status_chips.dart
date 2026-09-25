@@ -1,7 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../models/alarm.dart';
+import '../priority_category.dart';
 import '../theme.dart';
+
+class CategoryChip extends StatelessWidget {
+  const CategoryChip({super.key, required this.alarm});
+
+  final Alarm alarm;
+
+  @override
+  Widget build(BuildContext context) {
+    final category = priorityCategory(alarm.priority);
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      label: Text(category.name),
+      labelStyle: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: category.onColor,
+      ),
+      color: WidgetStatePropertyAll(category.color),
+      backgroundColor: category.color,
+      side: BorderSide(color: category.color),
+    );
+  }
+}
 
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.alarm});

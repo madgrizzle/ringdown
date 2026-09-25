@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/filters.dart';
+import 'alarm_sync.dart';
 
 class PrefsStore {
   PrefsStore(this.prefs);
@@ -15,15 +16,29 @@ class PrefsStore {
   static const _freezeKey = 'cleared_freeze';
   static const _lastUsernameKey = 'last_username';
   static const _hiddenKey = 'hidden_alarm_ids';
+  static const _showClearsKey = 'show_recent_clears_v1';
+  static const _historyKey = 'alarm_history_days';
 
   AlarmFilters readFilters() {
     final raw = _prefs.getString(_filtersKey);
-    if (raw == null) return const AlarmFilters();
-    try {
-      return AlarmFilters.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
-      return const AlarmFilters();
+    AlarmFilters filters;
+    if (raw == null) {
+      filters = const AlarmFilters();
+    } else {
+      try {
+        filters = AlarmFilters.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      } catch (_) {
+        filters = const AlarmFilters();
+      }
     }
+    // Phones that saved the old default were hiding clears. Show them once;
+    // Hide cleared still works after this.
+    if (_prefs.getBool(_showClearsKey) != true) {
+      filters = filters.copyWith(hideCleared: false);
+      _prefs.setBool(_showClearsKey, true);
+      _prefs.setString(_filtersKey, jsonEncode(filters.toJson()));
+    }
+    return filters;
   }
 
   Future<void> writeFilters(AlarmFilters filters) {
@@ -54,6 +69,16 @@ class PrefsStore {
       for (final e in freeze.entries) e.key.toString(): e.value.toIso8601String(),
     };
     return _prefs.setString(_freezeKey, jsonEncode(map));
+  }
+
+  int readHistoryDays() {
+    final raw = _prefs.getInt(_historyKey);
+    if (raw == null) return defaultAlarmHistoryDays;
+    return clampAlarmHistoryDays(raw);
+  }
+
+  Future<void> writeHistoryDays(int days) {
+    return _prefs.setInt(_historyKey, clampAlarmHistoryDays(days));
   }
 
   String? readLastUsername() => _prefs.getString(_lastUsernameKey);

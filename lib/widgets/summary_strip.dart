@@ -81,7 +81,9 @@ class StormBanner extends StatelessWidget {
   DateTime now,
 ) {
   final cutoff = now.toUtc().subtract(const Duration(minutes: 2));
-  final recent = items.where((a) => a.receivedAt.isAfter(cutoff)).toList();
+  final recent = items
+      .where((a) => a.isActive && a.receivedAt.isAfter(cutoff))
+      .toList();
   if (recent.length < 5) return null;
   final bySite = <String, List<Alarm>>{};
   for (final a in recent) {

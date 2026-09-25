@@ -50,6 +50,12 @@ Future<void> _initNotifications(ProviderContainer container) async {
         container.read(routerProvider).go('/alarms/$id');
       }
     };
+    notifications.onSummary = () {
+      container.read(alarmsProvider.notifier).silentRefresh();
+      if (container.read(authProvider).status == AuthStatus.authenticated) {
+        container.read(routerProvider).go('/alarms');
+      }
+    };
     notifications.onAck = (id) {
       container.read(alarmsProvider.notifier).ackOne(id);
     };

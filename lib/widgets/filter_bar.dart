@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../acknowledgements.dart';
 import '../models/filters.dart';
+import '../priority_category.dart';
 
 class FilterBar extends StatelessWidget {
   const FilterBar({
@@ -40,6 +41,14 @@ class FilterBar extends StatelessWidget {
             label: const Text('Show hidden'),
             selected: filters.showHidden,
             onSelected: (v) => onChanged(filters.copyWith(showHidden: v)),
+          ),
+          const SizedBox(width: 8),
+          _MenuChip<PriorityFloor>(
+            label: 'Priority: ${filters.priorityFloor.label}',
+            values: PriorityFloor.values,
+            nameOf: (floor) => floor.label,
+            onSelected: (floor) =>
+                onChanged(filters.copyWith(priorityFloor: floor)),
           ),
           const SizedBox(width: 8),
           _MenuChip<SortMode>(
@@ -135,6 +144,28 @@ Future<AlarmFilters?> showFilterSheet({
                     labelText: 'Search site, device, or description',
                     border: OutlineInputBorder(),
                   ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<PriorityFloor>(
+                  initialValue: draft.priorityFloor,
+                  decoration: const InputDecoration(
+                    labelText: 'Minimum priority',
+                    helperText: 'Shows this category and anything more urgent',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final floor in PriorityFloor.values)
+                      DropdownMenuItem(
+                        value: floor,
+                        child: Text(floor.label),
+                      ),
+                  ],
+                  onChanged: (floor) {
+                    if (floor == null) return;
+                    setState(() {
+                      draft = draft.copyWith(priorityFloor: floor);
+                    });
+                  },
                 ),
                 const SizedBox(height: 12),
                 TextField(

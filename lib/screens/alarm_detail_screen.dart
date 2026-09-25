@@ -215,6 +215,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
           spacing: 8,
           runSpacing: 8,
           children: [
+            CategoryChip(alarm: alarm),
             StatusChip(alarm: alarm),
             if (kShowAcknowledgements) AckChip(alarm: alarm),
             Chip(label: Text('Priority ${alarm.priority}')),

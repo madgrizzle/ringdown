@@ -7,8 +7,10 @@ import '../acknowledgements.dart';
 import '../models/alarm.dart';
 import '../models/auth_state.dart';
 import '../models/filters.dart';
+import '../priority_category.dart';
 import '../services/ack_queue.dart';
 import '../services/alarm_cache.dart';
+import '../services/alarm_sync.dart';
 import '../services/api_client.dart';
 import '../utils/alarm_timers.dart';
 import '../utils/limited.dart';
@@ -87,7 +89,6 @@ class AlarmsState {
 
 class AlarmsNotifier extends Notifier<AlarmsState> {
   Timer? _poll;
-  bool _loadMoreInFlight = false;
   final Set<int> _autoAckInFlight = {};
 
   ApiClient get _api => ref.read(apiClientProvider);
@@ -121,46 +122,62 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     return const AlarmsState();
   }
 
-  Future<void> refresh({bool silent = false}) async {
+  String? get _owner {
+    final auth = ref.read(authProvider);
+    final name = auth.username ?? auth.lastUsername;
+    if (name == null || name.isEmpty) return null;
+    return name;
+  }
+
+  Future<void> refresh({bool silent = false, bool forceLookback = false}) async {
     if (ref.read(authProvider).token == null) return;
     if (!silent) {
       state = state.copyWith(loading: true, clearError: true);
     }
+    final owner = _owner;
+    if (owner != null && _cache.owner != null && _cache.owner != owner) {
+      state = state.copyWith(items: const [], total: 0, loading: !silent);
+    }
+    final cached = owner == null ? null : _cache.loadFor(owner);
     try {
-      final filters = _filters;
-      final clientSort = filters.sort.isClientSort;
-      final pageSize = clientSort ? 100 : 50;
-      final page = await _api.listAlarms(
-        filters: filters,
-        page: 1,
-        pageSize: pageSize,
+      final stored = forceLookback || cached == null || owner == null
+          ? null
+          : _cache.readCursor(owner);
+      final days = ref.read(settingsProvider).historyDays;
+      final synced = await _sync(stored, cached?.items ?? const [], days);
+      final items = pruneClearedAlarms(
+        synced.alarms,
+        DateTime.now().toUtc(),
+        maxAge: Duration(days: clampAlarmHistoryDays(days)),
       );
-      var items = page.items;
-      items = _applyClientSearch(items, filters);
-      items = _applyClientSort(items, filters);
+      if (owner != null) {
+        await _cache.saveFor(owner, items);
+        if (synced.complete && synced.cursor != null) {
+          await _cache.writeCursor(owner, synced.cursor!);
+        }
+      }
       _captureClearedFreezes(state.items, items);
-      await _cache.save(items, total: page.total);
       state = state.copyWith(
         items: items,
-        total: page.total,
+        total: items.length,
         page: 1,
         loading: false,
         offline: false,
-        truncated: clientSort && page.total > items.length,
+        truncated: false,
         clearError: true,
       );
       unawaited(_autoAcknowledge(items));
     } catch (e) {
-      final cached = _cache.load();
-      if (cached != null && cached.items.isNotEmpty) {
+      final saved = cached?.items ?? const <Alarm>[];
+      if (saved.isNotEmpty) {
         state = state.copyWith(
-          items: cached.items,
-          total: cached.total,
+          items: saved,
+          total: saved.length,
           loading: false,
           offline: true,
           error: _err(e),
         );
-        unawaited(_autoAcknowledge(cached.items));
+        unawaited(_autoAcknowledge(saved));
       } else {
         state = state.copyWith(
           loading: false,
@@ -171,42 +188,48 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     }
   }
 
+  /// A longer keep period downloads that many days once. A shorter one only
+  /// drops the older cleared alarms. The old sync clock stays if the download fails.
+  Future<void> historyWindowChanged({required bool expanded}) async {
+    await refresh(forceLookback: expanded);
+  }
+
+  /// Pulls every page of the cursor. [complete] is false when a page was left unread,
+  /// so the caller keeps the old cursor and the next refresh asks again.
+  Future<({List<Alarm> alarms, DateTime? cursor, bool complete})> _sync(
+    DateTime? cursor,
+    List<Alarm> local,
+    int historyDays,
+  ) async {
+    var merged = local;
+    DateTime? afterTime;
+    int? afterId;
+    DateTime? serverTime;
+    for (var page = 0; page < 20; page++) {
+      final result = await _api.syncAlarms(
+        changedSince: cursor,
+        lookbackHours: cursor == null ? lookbackHoursFor(historyDays) : null,
+        afterTime: afterTime,
+        afterId: afterId,
+      );
+      serverTime ??= result.serverTime;
+      merged = mergeAlarms(merged, result.items);
+      if (!result.hasMore) {
+        return (alarms: merged, cursor: serverTime, complete: serverTime != null);
+      }
+      if (result.nextAfterTime == null || result.nextAfterId == null) {
+        break;
+      }
+      afterTime = result.nextAfterTime;
+      afterId = result.nextAfterId;
+    }
+    return (alarms: merged, cursor: null, complete: false);
+  }
+
   Future<void> silentRefresh() => refresh(silent: true);
 
-  Future<void> loadMore() async {
-    if (_loadMoreInFlight) return;
-    if (_filters.sort.isClientSort) return;
-    if (state.items.length >= state.total) return;
-    _loadMoreInFlight = true;
-    state = state.copyWith(loadingMore: true);
-    try {
-      final nextPage = state.page + 1;
-      final page = await _api.listAlarms(
-        filters: _filters,
-        page: nextPage,
-        pageSize: 50,
-      );
-      final merged = [...state.items];
-      final seen = merged.map((a) => a.id).toSet();
-      for (final a in page.items) {
-        if (seen.add(a.id)) merged.add(a);
-      }
-      final items = _applyClientSearch(merged, _filters);
-      _captureClearedFreezes(state.items, items);
-      state = state.copyWith(
-        items: items,
-        total: page.total,
-        page: nextPage,
-        loadingMore: false,
-        offline: false,
-      );
-      unawaited(_autoAcknowledge(items));
-    } catch (e) {
-      state = state.copyWith(loadingMore: false, error: _err(e));
-    } finally {
-      _loadMoreInFlight = false;
-    }
-  }
+  /// The synced cache is the whole list, so the list does not ask for a later page.
+  Future<void> loadMore() async {}
 
   Future<void> applyFilters(AlarmFilters filters) async {
     await ref.read(settingsProvider.notifier).setFilters(filters);
@@ -214,9 +237,26 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   }
 
   List<Alarm> get visibleItems {
-    var items = _applyClientSearch(state.items, _filters);
+    final filters = _filters;
+    var items = state.items.where((alarm) {
+      if (filters.hideCleared && alarm.isCleared) return false;
+      if (filters.unackedOnly && alarm.acked) return false;
+      if (!filters.priorityFloor.allows(alarm.priority)) return false;
+      final site = filters.siteContains.trim().toLowerCase();
+      if (site.isNotEmpty && !alarm.siteId.toLowerCase().contains(site)) {
+        return false;
+      }
+      final device = filters.deviceContains.trim().toLowerCase();
+      if (device.isNotEmpty &&
+          !alarm.device.toLowerCase().contains(device)) {
+        return false;
+      }
+      return true;
+    }).toList();
+    items = _applyClientSearch(items, filters);
+    items = _applyClientSort(items, filters);
     final hidden = ref.read(settingsProvider).hiddenIds;
-    if (!_filters.showHidden) {
+    if (!filters.showHidden) {
       items = items.where((a) => !hidden.contains(a.id)).toList();
     }
     return items;
@@ -428,12 +468,17 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
 
   void _upsert(Alarm alarm) {
     final idx = state.items.indexWhere((a) => a.id == alarm.id);
+    final List<Alarm> next;
     if (idx == -1) {
-      state = state.copyWith(items: [alarm, ...state.items]);
+      next = [alarm, ...state.items];
     } else {
-      final next = [...state.items];
+      next = [...state.items];
       next[idx] = alarm;
-      state = state.copyWith(items: next);
+    }
+    state = state.copyWith(items: next, total: next.length);
+    final owner = _owner;
+    if (owner != null) {
+      unawaited(_cache.saveFor(owner, next));
     }
   }
 
@@ -473,7 +518,20 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     final freeze = ref.read(settingsProvider).clearedFreeze;
     final copy = [...items];
     int byTimeDesc(Alarm a, Alarm b) => b.alarmAt.compareTo(a.alarmAt);
+    int byText(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
     switch (f.sort) {
+      case SortMode.timeNewest:
+        copy.sort(byTimeDesc);
+      case SortMode.timeOldest:
+        copy.sort((a, b) => a.alarmAt.compareTo(b.alarmAt));
+      case SortMode.siteAsc:
+        copy.sort((a, b) => byText(a.siteId, b.siteId));
+      case SortMode.siteDesc:
+        copy.sort((a, b) => byText(b.siteId, a.siteId));
+      case SortMode.deviceAsc:
+        copy.sort((a, b) => byText(a.device, b.device));
+      case SortMode.deviceDesc:
+        copy.sort((a, b) => byText(b.device, a.device));
       case SortMode.siteThenDevice:
         copy.sort((a, b) {
           final s = a.siteId.toLowerCase().compareTo(b.siteId.toLowerCase());
@@ -510,8 +568,6 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
           final db = unackedDuration(alarm: b, now: now);
           return db.compareTo(da);
         });
-      default:
-        break;
     }
     return copy;
   }

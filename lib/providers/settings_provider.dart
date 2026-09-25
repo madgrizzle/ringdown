@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/filters.dart';
+import '../services/alarm_sync.dart';
 import '../services/prefs_store.dart';
 
 class SettingsState {
@@ -10,6 +11,7 @@ class SettingsState {
     required this.filters,
     required this.clearedFreeze,
     this.hiddenIds = const {},
+    this.historyDays = defaultAlarmHistoryDays,
   });
 
   final ThemeMode themeMode;
@@ -17,17 +19,22 @@ class SettingsState {
   final Map<int, DateTime> clearedFreeze;
   final Set<int> hiddenIds;
 
+  /// How many days a cleared alarm stays on this phone. 1 to 30.
+  final int historyDays;
+
   SettingsState copyWith({
     ThemeMode? themeMode,
     AlarmFilters? filters,
     Map<int, DateTime>? clearedFreeze,
     Set<int>? hiddenIds,
+    int? historyDays,
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
       filters: filters ?? this.filters,
       clearedFreeze: clearedFreeze ?? this.clearedFreeze,
       hiddenIds: hiddenIds ?? this.hiddenIds,
+      historyDays: historyDays ?? this.historyDays,
     );
   }
 }
@@ -43,7 +50,14 @@ class SettingsNotifier extends Notifier<SettingsState> {
       filters: prefs.readFilters(),
       clearedFreeze: prefs.readClearedFreeze(),
       hiddenIds: prefs.readHiddenIds(),
+      historyDays: prefs.readHistoryDays(),
     );
+  }
+
+  Future<void> setHistoryDays(int days) async {
+    final next = clampAlarmHistoryDays(days);
+    state = state.copyWith(historyDays: next);
+    await _prefs.writeHistoryDays(next);
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
