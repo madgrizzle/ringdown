@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../acknowledgements.dart';
+import '../alarm_cycles.dart';
 import '../models/alarm.dart';
 import '../providers/alarms_provider.dart';
 import '../providers/settings_provider.dart';
@@ -11,6 +12,7 @@ import '../providers/ticker_provider.dart';
 import '../services/api_client.dart';
 import '../utils/alarm_timers.dart';
 import '../utils/duration_format.dart';
+import '../widgets/cycle_timeline.dart';
 import '../widgets/status_chips.dart';
 import '../widgets/timer_row.dart';
 
@@ -66,8 +68,12 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
   }
 
   Future<void> _toggleHidden(Alarm alarm, bool currentlyHidden) async {
+    final cycles = cyclesFor(alarm, ref.read(alarmsProvider).items);
+    final settings = ref.read(settingsProvider.notifier);
     if (currentlyHidden) {
-      await ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
+      for (final cycle in cycles) {
+        await settings.unhideAlarm(cycle.id);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Alarm unhidden')),
@@ -75,9 +81,11 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
       }
       return;
     }
-    await ref.read(settingsProvider.notifier).hideAlarm(alarm.id);
-    if (alarm.canAck) {
-      await ref.read(alarmsProvider.notifier).ackOne(alarm.id);
+    for (final cycle in cycles) {
+      await settings.hideAlarm(cycle.id);
+      if (cycle.canAck) {
+        await ref.read(alarmsProvider.notifier).ackOne(cycle.id);
+      }
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -128,8 +136,12 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
         .where((a) => a.id == widget.alarmId);
     final alarm = fromList.isNotEmpty ? fromList.first : _alarm;
 
-    final hidden = alarm != null &&
-        ref.watch(settingsProvider).hiddenIds.contains(alarm.id);
+    final hiddenIds = ref.watch(settingsProvider).hiddenIds;
+    final cycles = alarm == null
+        ? const <Alarm>[]
+        : cyclesFor(alarm, ref.watch(alarmsProvider).items);
+    final hidden =
+        cycles.isNotEmpty && cycles.every((cycle) => hiddenIds.contains(cycle.id));
 
     return Scaffold(
       appBar: AppBar(
@@ -157,7 +169,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
           ? const Center(child: CircularProgressIndicator())
           : alarm == null
               ? Center(child: Text(_error ?? 'Alarm not found'))
-              : _body(context, alarm, now, freeze[alarm.id]),
+              : _body(context, alarm, now, freeze[alarm.id], cycles),
       bottomNavigationBar: kShowAcknowledgements && alarm != null && alarm.canAck
           ? SafeArea(
               child: Padding(
@@ -190,6 +202,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
     Alarm alarm,
     DateTime now,
     DateTime? freeze,
+    List<Alarm> cycles,
   ) {
     final fmt = DateFormat.yMMMd().add_jm();
     final active = activeDuration(
@@ -222,6 +235,24 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
             if ((alarm.aid ?? '').isNotEmpty) Chip(label: Text('AID ${alarm.aid}')),
           ],
         ),
+        if (cycles.length > 1) ...[
+          const SizedBox(height: 16),
+          Text(
+            cycleSummary(cycles, now),
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 8),
+          CycleTimelineBar(cycles: cycles, now: now),
+          const SizedBox(height: 8),
+          for (final cycle in cycles.reversed)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(cycleIntervalLabel(cycle, now)),
+            ),
+        ],
         const SizedBox(height: 16),
         TimerRow(
           alarm: alarm,

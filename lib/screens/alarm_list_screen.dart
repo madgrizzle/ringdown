@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../acknowledgements.dart';
+import '../alarm_cycles.dart';
 import '../models/alarm.dart';
 import '../models/filters.dart';
 import '../providers/alarms_provider.dart';
@@ -124,38 +125,6 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     await _ack(context, ids);
   }
 
-  Future<void> _hide(BuildContext context, Alarm alarm) async {
-    await ref.read(settingsProvider.notifier).hideAlarm(alarm.id);
-    if (alarm.canAck && context.mounted) {
-      await ref.read(alarmsProvider.notifier).ackOne(alarm.id);
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          kShowAcknowledgements && alarm.canAck
-              ? 'Hidden and acknowledged'
-              : 'Alarm hidden',
-        ),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () {
-            ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _unhide(BuildContext context, Alarm alarm) async {
-    await ref.read(settingsProvider.notifier).unhideAlarm(alarm.id);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alarm unhidden')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -165,7 +134,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     final freeze = settings.clearedFreeze;
     final hiddenIds = settings.hiddenIds;
     final now = ref.watch(tickerProvider);
-    final items = ref.read(alarmsProvider.notifier).visibleItems;
+    final items = ref.read(alarmsProvider.notifier).visibleItems();
     final unackedCount =
         items.where((a) => !a.acked && a.isActive).length;
     final storm = stormFrom(items, now);
@@ -374,31 +343,40 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       );
     }
 
+    final cycleItems = filters.hideCleared
+        ? ref.read(alarmsProvider.notifier).visibleItems(includeCleared: true)
+        : items;
+    final cycles = [
+      for (final group in groupAlarmCycles(cycleItems))
+        if (!filters.hideCleared || group.current.isActive) group,
+    ];
     if (filters.groupBy == GroupBy.none) {
       return ListView.separated(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-        itemCount: items.length + (alarms.loadingMore ? 1 : 0),
+        itemCount: cycles.length + (alarms.loadingMore ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, i) {
-          if (i >= items.length) {
+          if (i >= cycles.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
               child: Center(child: CircularProgressIndicator()),
             );
           }
-          return _card(context, items[i], now, freeze, alarms, hiddenIds);
+          return _card(context, cycles[i], now, freeze, alarms, hiddenIds);
         },
       );
     }
 
-    final groups = <String, List<Alarm>>{};
-    for (final a in items) {
-      final key = filters.groupBy == GroupBy.site ? a.siteId : a.device;
-      groups.putIfAbsent(key, () => []).add(a);
+    final sections = <String, List<AlarmCycleGroup>>{};
+    for (final cycle in cycles) {
+      final key = filters.groupBy == GroupBy.site
+          ? cycle.current.siteId
+          : cycle.current.device;
+      sections.putIfAbsent(key, () => []).add(cycle);
     }
-    final keys = groups.keys.toList();
+    final keys = sections.keys.toList();
     return ListView.builder(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -406,8 +384,10 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       itemCount: keys.length,
       itemBuilder: (context, gi) {
         final key = keys[gi];
-        final group = groups[key]!;
-        final unacked = group.where((a) => a.canAck).toList();
+        final section = sections[key]!;
+        final unacked = [
+          for (final cycle in section) ...cycle.cycles.where((a) => a.canAck),
+        ];
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -422,13 +402,12 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Badge(label: Text('${group.length}')),
+                  Badge(label: Text('${section.length}')),
                   if (kShowAcknowledgements && unacked.isNotEmpty)
                     TextButton(
                       onPressed: () => _confirmBulk(
                         context,
-                        message:
-                            'ACK ${unacked.length} alarms at $key?',
+                        message: 'ACK ${unacked.length} alarms at $key?',
                         ids: unacked.map((a) => a.id).toList(),
                       ),
                       child: const Text('ACK all'),
@@ -436,8 +415,8 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                 ],
               ),
             ),
-            for (final a in group) ...[
-              _card(context, a, now, freeze, alarms, hiddenIds),
+            for (final cycle in section) ...[
+              _card(context, cycle, now, freeze, alarms, hiddenIds),
               const SizedBox(height: 8),
             ],
           ],
@@ -448,31 +427,78 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
 
   Widget _card(
     BuildContext context,
-    Alarm alarm,
+    AlarmCycleGroup group,
     DateTime now,
     Map<int, DateTime> freeze,
     AlarmsState alarms,
     Set<int> hiddenIds,
   ) {
-    final hidden = hiddenIds.contains(alarm.id);
+    final alarm = group.current;
+    final ids = group.cycles.map((cycle) => cycle.id).toList();
+    final hidden = ids.every(hiddenIds.contains);
+    final selected = ids.every(alarms.selected.contains);
     return AlarmCard(
       alarm: alarm,
+      cycles: group.cycles,
       now: now,
       clearedFreezeAt: freeze[alarm.id],
       selecting: alarms.selecting,
-      selected: alarms.selected.contains(alarm.id),
+      selected: selected,
       hidden: hidden,
-      onAck: () => _ack(context, [alarm.id]),
-      onHide: () => _hide(context, alarm),
-      onUnhide: () => _unhide(context, alarm),
+      onAck: () => _ack(context, ids),
+      onHide: () => _hideAll(context, group.cycles),
+      onUnhide: () => _unhideAll(context, ids),
       onOpen: () => context.push('/alarms/${alarm.id}'),
       onLongPress: kShowAcknowledgements
           ? () => ref
               .read(alarmsProvider.notifier)
               .enterSelect(firstId: alarm.id)
           : null,
-      onToggleSelect: () =>
-          ref.read(alarmsProvider.notifier).toggleSelected(alarm.id),
+      onToggleSelect: () {
+        final notifier = ref.read(alarmsProvider.notifier);
+        for (final id in ids) {
+          final on = ref.read(alarmsProvider).selected.contains(id);
+          if (selected && on) notifier.toggleSelected(id);
+          if (!selected && !on) notifier.toggleSelected(id);
+        }
+      },
     );
+  }
+
+  Future<void> _hideAll(BuildContext context, List<Alarm> cycles) async {
+    final settings = ref.read(settingsProvider.notifier);
+    for (final alarm in cycles) {
+      await settings.hideAlarm(alarm.id);
+      if (alarm.canAck) {
+        await ref.read(alarmsProvider.notifier).ackOne(alarm.id);
+      }
+    }
+    if (!context.mounted) return;
+    final ids = cycles.map((alarm) => alarm.id).toList();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(cycles.length == 1 ? 'Alarm hidden' : 'Alarms hidden'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => _unhideIds(ids),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _unhideAll(BuildContext context, List<int> ids) async {
+    await _unhideIds(ids);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Alarm unhidden')),
+      );
+    }
+  }
+
+  Future<void> _unhideIds(List<int> ids) async {
+    final settings = ref.read(settingsProvider.notifier);
+    for (final id in ids) {
+      await settings.unhideAlarm(id);
+    }
   }
 }

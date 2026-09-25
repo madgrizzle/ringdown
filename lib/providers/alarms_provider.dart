@@ -236,10 +236,12 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     await refresh();
   }
 
-  List<Alarm> get visibleItems {
+  List<Alarm> visibleItems({bool includeCleared = false}) {
     final filters = _filters;
     var items = state.items.where((alarm) {
-      if (filters.hideCleared && alarm.isCleared) return false;
+      if (filters.hideCleared && !includeCleared && alarm.isCleared) {
+        return false;
+      }
       if (filters.unackedOnly && alarm.acked) return false;
       if (!filters.priorityFloor.allows(alarm.priority)) return false;
       final site = filters.siteContains.trim().toLowerCase();
@@ -280,14 +282,14 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
 
   void selectAllVisible() {
     state = state.copyWith(
-      selected: visibleItems.map((a) => a.id).toSet(),
+      selected: visibleItems().map((a) => a.id).toSet(),
       selecting: true,
     );
   }
 
   void selectAllUnackedVisible() {
     state = state.copyWith(
-      selected: visibleItems.where((a) => !a.acked).map((a) => a.id).toSet(),
+      selected: visibleItems().where((a) => !a.acked).map((a) => a.id).toSet(),
       selecting: true,
     );
   }
@@ -438,7 +440,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   }
 
   Future<AckBatchResult> ackSite(String siteId) {
-    final ids = visibleItems
+    final ids = visibleItems()
         .where((a) => a.siteId == siteId && a.canAck)
         .map((a) => a.id);
     return ackMany(ids);

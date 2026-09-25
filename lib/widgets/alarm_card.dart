@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../acknowledgements.dart';
+import '../alarm_cycles.dart';
 import '../models/alarm.dart';
 import '../theme.dart';
+import 'cycle_timeline.dart';
 import 'status_chips.dart';
 import 'timer_row.dart';
 
@@ -21,9 +23,14 @@ class AlarmCard extends StatelessWidget {
     this.onOpen,
     this.onLongPress,
     this.onToggleSelect,
+    this.cycles = const [],
   });
 
   final Alarm alarm;
+
+  /// Other cycles of this same condition. The timeline shows when there are
+  /// at least two.
+  final List<Alarm> cycles;
   final DateTime now;
   final DateTime? clearedFreezeAt;
   final bool selecting;
@@ -125,6 +132,17 @@ class AlarmCard extends StatelessWidget {
                             ),
                         ],
                       ),
+                      if (cycles.length > 1) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          cycleSummary(cycles, now),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        CycleTimelineBar(cycles: cycles, now: now),
+                      ],
                       const SizedBox(height: 6),
                       TimerRow(
                         alarm: alarm,
