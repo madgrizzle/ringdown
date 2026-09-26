@@ -148,6 +148,8 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
             if ((auth.username ?? '').isNotEmpty)
               Text(
                 auth.username!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
           ],
@@ -173,7 +175,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
                 tooltip: 'Select all unacked visible',
                 onPressed: () =>
                     ref.read(alarmsProvider.notifier).selectAllUnackedVisible(),
-                icon: const Icon(Icons.deselect),
+                icon: const Icon(Icons.checklist_rtl),
               ),
             IconButton(
               tooltip: 'Cancel',
@@ -226,9 +228,14 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
             onChanged: (f) =>
                 ref.read(alarmsProvider.notifier).applyFilters(f),
             onOpenSheet: () async {
+              final availableSites = {
+                for (final a in alarms.items) a.siteId,
+              }.toList()
+                ..sort();
               final next = await showFilterSheet(
                 context: context,
                 current: filters,
+                availableSites: availableSites,
               );
               if (next != null) {
                 await ref.read(alarmsProvider.notifier).applyFilters(next);

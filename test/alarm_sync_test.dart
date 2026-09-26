@@ -35,6 +35,24 @@ void main() {
     expect(byId[2]!.isCleared, isTrue);
   });
 
+  test('merge still applies a concurrent clear on an acked-but-not-yet-'
+      'confirmed alarm, instead of discarding the whole incoming record', () {
+    final local = [_alarm(id: 1, acked: true)];
+    final incoming = [
+      _alarm(
+        id: 1,
+        status: 'N',
+        acked: false,
+        clearedAt: DateTime.utc(2026, 9, 24, 12, 5),
+      ),
+    ];
+    final merged = mergeAlarms(local, incoming);
+    expect(merged.single.acked, isTrue, reason: 'local ack is preserved');
+    expect(merged.single.isCleared, isTrue,
+        reason: 'the clear must not be hidden by the pending local ack');
+    expect(merged.single.clearedAt, DateTime.utc(2026, 9, 24, 12, 5));
+  });
+
   test('merge applies a clear over the copy the phone already had', () {
     final local = [_alarm(id: 7)];
     final incoming = [

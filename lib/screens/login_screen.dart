@@ -33,6 +33,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    // Without this, the Enter key on the password field and a tap on the
+    // "Sign in" button could both fire _submit() before the first setState
+    // above committed, sending two concurrent login requests for one tap.
+    if (_busy) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _busy = true;
@@ -46,7 +50,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } catch (e) {
-      setState(() => _error = e.toString());
+      // e.toString() on an unexpected (non-API) error can surface a raw
+      // exception/stack-trace-shaped string to the user; show a generic
+      // message instead and keep the detail only in the debug log.
+      debugPrint('Login failed: $e');
+      setState(() => _error = 'Something went wrong. Please try again.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

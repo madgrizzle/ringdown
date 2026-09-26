@@ -90,6 +90,8 @@ class AlarmsState {
 class AlarmsNotifier extends Notifier<AlarmsState> {
   Timer? _poll;
   final Set<int> _autoAckInFlight = {};
+  Future<void>? _refreshInFlight;
+  bool _draining = false;
 
   ApiClient get _api => ref.read(apiClientProvider);
   AlarmCache get _cache => ref.read(alarmCacheProvider);
@@ -105,12 +107,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   @override
   AlarmsState build() {
     ref.onDispose(() => _poll?.cancel());
-    _poll = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (ref.read(authProvider).status != AuthStatus.authenticated) {
-        return;
-      }
-      silentRefresh();
-    });
+    resumePoll();
     ref.listen(connectivityProvider, (prev, next) {
       final wasOffline = prev?.asData?.value == false;
       final nowOnline = next.asData?.value == true;
@@ -122,11 +119,39 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     return const AlarmsState();
   }
 
+  /// Stops the 20s poll. Call when the app is backgrounded so it doesn't
+  /// keep burning battery/data (and flipping `offline` on background
+  /// network hiccups the user never sees) while nothing is on screen.
+  void pausePoll() {
+    _poll?.cancel();
+    _poll = null;
+  }
+
+  /// Restarts the 20s poll. Safe to call repeatedly; a no-op if already running.
+  void resumePoll() {
+    if (_poll != null) return;
+    _poll = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (ref.read(authProvider).status != AuthStatus.authenticated) {
+        return;
+      }
+      silentRefresh();
+    });
+  }
+
   String? get _owner {
     final auth = ref.read(authProvider);
     final name = auth.username ?? auth.lastUsername;
     if (name == null || name.isEmpty) return null;
     return name;
+  }
+
+  /// Ties the offline ack queue to whoever is currently logged in. A stored
+  /// queue belonging to a different technician (e.g. someone logged out
+  /// before it drained, and someone else logged into the same device) is
+  /// dropped rather than silently flushed under the new user's session.
+  Future<void> _syncQueueOwner() async {
+    final owner = _owner;
+    if (owner != null) await _queue.setOwner(owner);
   }
 
   Future<void> refresh({bool silent = false, bool forceLookback = false}) async {
@@ -135,6 +160,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
       state = state.copyWith(loading: true, clearError: true);
     }
     final owner = _owner;
+    await _syncQueueOwner();
     if (owner != null && _cache.owner != null && _cache.owner != owner) {
       state = state.copyWith(items: const [], total: 0, loading: !silent);
     }
@@ -226,7 +252,20 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     return (alarms: merged, cursor: null, complete: false);
   }
 
-  Future<void> silentRefresh() => refresh(silent: true);
+  /// Deduped: the 20s poll, a connectivity-regain, and an app-resume can all
+  /// fire near-simultaneously. Without this, each would independently retry
+  /// an expired access token, and with rotating refresh tokens, two parallel
+  /// refreshes racing is a classic trigger for a false-positive "refresh
+  /// token reuse" detection that force-logs the user out.
+  Future<void> silentRefresh() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+    final future = refresh(silent: true).whenComplete(() {
+      _refreshInFlight = null;
+    });
+    _refreshInFlight = future;
+    return future;
+  }
 
   /// The synced cache is the whole list, so the list does not ask for a later page.
   Future<void> loadMore() async {}
@@ -244,8 +283,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
       }
       if (filters.unackedOnly && alarm.acked) return false;
       if (!filters.priorityFloor.allows(alarm.priority)) return false;
-      final site = filters.siteContains.trim().toLowerCase();
-      if (site.isNotEmpty && !alarm.siteId.toLowerCase().contains(site)) {
+      if (filters.sites.isNotEmpty && !filters.sites.contains(alarm.siteId)) {
         return false;
       }
       final device = filters.deviceContains.trim().toLowerCase();
@@ -304,11 +342,19 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   }) async {
     final byId = {for (final a in state.items) a.id: a};
     final targets = <Alarm>[];
+    // An id not currently loaded (e.g. a queued ack for an alarm that isn't
+    // in this sync window) used to just be skipped here forever: not acked,
+    // not removed from the queue, not retried by anything else. Ack it
+    // directly by id instead, the same way an unknown incoming push does.
+    final unknownIds = <int>[];
     var skipped = 0;
     var alreadyCleared = 0;
     for (final id in ids) {
       final a = byId[id];
-      if (a == null) continue;
+      if (a == null) {
+        unknownIds.add(id);
+        continue;
+      }
       if (a.acked) {
         skipped++;
         continue;
@@ -319,8 +365,27 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
       }
       targets.add(a);
     }
+
+    var unknownAcked = 0;
+    var unknownFailed = 0;
+    if (unknownIds.isNotEmpty) {
+      var unknownDone = 0;
+      await mapLimited(unknownIds, 8, (id) async {
+        final ok = await _ackUnknown(id);
+        if (ok) {
+          unknownAcked++;
+        } else {
+          unknownFailed++;
+        }
+        unknownDone++;
+        onProgress?.call(unknownDone, unknownIds.length + targets.length);
+      });
+    }
+
     if (targets.isEmpty) {
       return AckBatchResult(
+        acked: unknownAcked,
+        failed: unknownFailed,
         skipped: skipped,
         alreadyCleared: alreadyCleared,
       );
@@ -367,7 +432,7 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
         revert.add(alarm.id);
       } finally {
         done++;
-        onProgress?.call(done, targets.length);
+        onProgress?.call(unknownIds.length + done, unknownIds.length + targets.length);
       }
     });
 
@@ -387,9 +452,9 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     }
     await _cache.save(state.items, total: state.total);
     return AckBatchResult(
-      acked: acked,
+      acked: acked + unknownAcked,
       alreadyCleared: cleared,
-      failed: failed,
+      failed: failed + unknownFailed,
       skipped: skipped,
     );
   }
@@ -428,14 +493,24 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     }
   }
 
-  Future<void> _ackUnknown(int id) async {
+  /// Returns whether the ack actually reached the server. On a network-ish
+  /// failure (no status code) it's queued for retry; on a 404 (alarm gone/
+  /// already cleared server-side) it's dropped rather than retried forever.
+  Future<bool> _ackUnknown(int id) async {
     try {
       await _api.ack(id);
       await _queue.remove(id);
+      return true;
     } on ApiException catch (e) {
-      if (e.statusCode == null) await _queue.enqueue(id);
+      if (e.statusCode == null) {
+        await _queue.enqueue(id);
+      } else if (e.statusCode == 404) {
+        await _queue.remove(id);
+      }
+      return false;
     } catch (_) {
       await _queue.enqueue(id);
+      return false;
     }
   }
 
@@ -449,9 +524,16 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
   Future<AckBatchResult> ackStorm(List<int> ids) => ackMany(ids);
 
   Future<void> drainAckQueue() async {
-    final pending = _queue.peek();
-    if (pending.isEmpty) return;
-    await ackMany(pending);
+    if (_draining) return;
+    _draining = true;
+    try {
+      await _syncQueueOwner();
+      final pending = _queue.peek();
+      if (pending.isEmpty) return;
+      await ackMany(pending);
+    } finally {
+      _draining = false;
+    }
   }
 
   Future<Alarm> loadDetail(int id) async {
@@ -543,6 +625,13 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
       case SortMode.status:
         copy.sort((a, b) {
           if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+          return byTimeDesc(a, b);
+        });
+      case SortMode.severity:
+        // Lower Telenium priority number = more urgent (Critical 1-10 first).
+        copy.sort((a, b) {
+          final byPriority = a.priority.compareTo(b.priority);
+          if (byPriority != 0) return byPriority;
           return byTimeDesc(a, b);
         });
       case SortMode.unackedFirst:

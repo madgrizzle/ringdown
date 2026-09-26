@@ -5,6 +5,19 @@ class AckQueue {
 
   final SharedPreferences _prefs;
   static const _key = 'ack_queue';
+  static const _ownerKey = 'ack_queue_owner';
+
+  String? get owner => _prefs.getString(_ownerKey);
+
+  /// Ties this queue to a technician. Switching to a different owner drops
+  /// whatever was queued (it belongs to whoever was previously logged in on
+  /// this device and must not flush under the new session), then records
+  /// the new owner. A no-op when the owner hasn't changed.
+  Future<void> setOwner(String newOwner) async {
+    if (owner == newOwner) return;
+    await clear();
+    await _prefs.setString(_ownerKey, newOwner);
+  }
 
   List<int> peek() {
     final raw = _prefs.getStringList(_key) ?? const [];
@@ -38,5 +51,8 @@ class AckQueue {
     await _prefs.setStringList(_key, ids.map((e) => e.toString()).toList());
   }
 
-  Future<void> clear() => _prefs.remove(_key);
+  Future<void> clear() async {
+    await _prefs.remove(_key);
+    await _prefs.remove(_ownerKey);
+  }
 }

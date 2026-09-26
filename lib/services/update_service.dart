@@ -15,6 +15,22 @@ class UpdateService {
   static const _playStoreUrl =
       'https://play.google.com/store/apps/details?id=com.phionalerter.ringdown';
 
+  // The store_url that /app/version returns is launched externally with no
+  // further confirmation, so a compromised or MITM'd response must not be
+  // able to point the phone at an arbitrary URL (phishing, a non-store
+  // scheme, etc). Only accept https links to a known app-store host.
+  static const _allowedStoreHosts = {
+    'play.google.com',
+    'apps.apple.com',
+    'testflight.apple.com',
+  };
+
+  static bool _isTrustedStoreUrl(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || uri.scheme != 'https') return false;
+    return _allowedStoreHosts.contains(uri.host);
+  }
+
   Future<AppUpdateOffer?> check() async {
     final info = await PackageInfo.fromPlatform();
     final currentBuild = int.tryParse(info.buildNumber) ?? 0;
@@ -25,7 +41,12 @@ class UpdateService {
     final latestBuild = _asInt(platform['build']);
     if (latestBuild <= 0 || latestBuild <= currentBuild) return null;
     final minBuild = _asInt(platform['min_build']);
-    final storeUrl = (platform['store_url'] as String?)?.trim();
+    var storeUrl = (platform['store_url'] as String?)?.trim();
+    if (storeUrl != null &&
+        storeUrl.isNotEmpty &&
+        !_isTrustedStoreUrl(storeUrl)) {
+      storeUrl = null;
+    }
     final message = (platform['message'] as String?)?.trim();
     return AppUpdateOffer(
       latestVersion: (platform['version'] as String?)?.trim().isNotEmpty == true
@@ -58,7 +79,7 @@ class UpdateService {
       }
     }
     final raw = offer.storeUrl;
-    if (raw == null || raw.isEmpty) return;
+    if (raw == null || raw.isEmpty || !_isTrustedStoreUrl(raw)) return;
     final uri = Uri.parse(raw);
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }

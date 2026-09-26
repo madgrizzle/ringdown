@@ -1,7 +1,7 @@
 name: ringdown
 description: Technician alarm inbox for the NMS Alert Gateway.
 publish_to: "none"
-version: 1.0.0+16
+version: 1.0.0+17
 environment:
   sdk: ^3.13.2
 

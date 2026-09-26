@@ -10,6 +10,7 @@ enum SortMode {
   deviceDesc,
   siteThenDevice,
   status,
+  severity,
   unackedFirst,
   longestActive,
   longestUnacked,
@@ -37,6 +38,7 @@ extension SortModeX on SortMode {
         SortMode.deviceDesc => 'Device Z–A',
         SortMode.siteThenDevice => 'Site, then device',
         SortMode.status => 'Status',
+        SortMode.severity => 'Severity (most urgent first)',
         SortMode.unackedFirst => 'Unacked first',
         SortMode.longestActive => 'Longest active',
         SortMode.longestUnacked => 'Longest unacked',
@@ -51,6 +53,7 @@ extension SortModeX on SortMode {
   bool get isClientSort => switch (this) {
         SortMode.siteThenDevice ||
         SortMode.status ||
+        SortMode.severity ||
         SortMode.unackedFirst ||
         SortMode.longestActive ||
         SortMode.longestUnacked =>
@@ -84,10 +87,16 @@ class AlarmFilters {
     this.hideCleared = false,
     this.unackedOnly = false,
     this.showHidden = false,
-    this.siteContains = '',
+    this.sites = const {},
     this.deviceContains = '',
     this.search = '',
-    this.sort = SortMode.unackedFirst,
+    // Was SortMode.unackedFirst. Acknowledgement is currently hidden
+    // (kShowAcknowledgements = false) app-wide, so defaulting to an
+    // ack-based sort here — even though every read site applies
+    // .withoutAcknowledgement before using it — left the persisted/default
+    // preference itself out of sync with what's actually shown. A neutral
+    // default avoids that ambiguity regardless of the flag's state.
+    this.sort = SortMode.timeNewest,
     this.groupBy = GroupBy.none,
     this.priorityFloor = PriorityFloor.any,
   });
@@ -95,7 +104,9 @@ class AlarmFilters {
   final bool hideCleared;
   final bool unackedOnly;
   final bool showHidden;
-  final String siteContains;
+
+  /// Exact site IDs to include. Empty means no site filter (show all sites).
+  final Set<String> sites;
   final String deviceContains;
   final String search;
   final SortMode sort;
@@ -108,7 +119,7 @@ class AlarmFilters {
     bool? hideCleared,
     bool? unackedOnly,
     bool? showHidden,
-    String? siteContains,
+    Set<String>? sites,
     String? deviceContains,
     String? search,
     SortMode? sort,
@@ -119,7 +130,7 @@ class AlarmFilters {
       hideCleared: hideCleared ?? this.hideCleared,
       unackedOnly: unackedOnly ?? this.unackedOnly,
       showHidden: showHidden ?? this.showHidden,
-      siteContains: siteContains ?? this.siteContains,
+      sites: sites ?? this.sites,
       deviceContains: deviceContains ?? this.deviceContains,
       search: search ?? this.search,
       sort: sort ?? this.sort,
@@ -132,7 +143,7 @@ class AlarmFilters {
         'hideCleared': hideCleared,
         'unackedOnly': unackedOnly,
         'showHidden': showHidden,
-        'siteContains': siteContains,
+        'sites': sites.toList(),
         'deviceContains': deviceContains,
         'search': search,
         'sort': sort.name,
@@ -141,16 +152,24 @@ class AlarmFilters {
       };
 
   factory AlarmFilters.fromJson(Map<String, dynamic> json) {
+    // Older persisted settings stored a single free-text 'siteContains'
+    // string rather than a 'sites' list. There is no substring-to-exact-set
+    // equivalent, so that old value is intentionally not migrated — it just
+    // reverts to "no site filter" once, which the user can re-pick from the
+    // (now multi-select) filter sheet.
+    final rawSites = json['sites'] as List<dynamic>?;
     return AlarmFilters(
       hideCleared: json['hideCleared'] as bool? ?? false,
       unackedOnly: json['unackedOnly'] as bool? ?? false,
       showHidden: json['showHidden'] as bool? ?? false,
-      siteContains: json['siteContains'] as String? ?? '',
+      sites: rawSites == null
+          ? const {}
+          : rawSites.map((e) => e.toString()).toSet(),
       deviceContains: json['deviceContains'] as String? ?? '',
       search: json['search'] as String? ?? '',
       sort: SortMode.values.firstWhere(
         (e) => e.name == json['sort'],
-        orElse: () => SortMode.unackedFirst,
+        orElse: () => SortMode.timeNewest,
       ),
       groupBy: GroupBy.values.firstWhere(
         (e) => e.name == json['groupBy'],

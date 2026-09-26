@@ -64,6 +64,11 @@ Future<void> _initNotifications(ProviderContainer container) async {
         container.read(alarmsProvider.notifier).acknowledgeIncoming(id);
       }
     };
+    // Callbacks above must be wired before this: a cold-start tap on a
+    // notification that itself launched the (previously terminated) app is
+    // cached by init() and only makes sense to replay once onTap/onAck/
+    // onSummary are set.
+    notifications.consumePendingLaunchNotification();
     if (container.read(authProvider).status == AuthStatus.authenticated) {
       await container.read(authProvider.notifier).registerPush();
     }
@@ -98,12 +103,17 @@ class _RingdownAppState extends ConsumerState<RingdownApp>
     final ticker = ref.read(tickerProvider.notifier);
     if (state == AppLifecycleState.resumed) {
       ticker.resume();
+      ref.read(alarmsProvider.notifier).resumePoll();
       ref.read(alarmsProvider.notifier).silentRefresh();
       ref.read(alarmsProvider.notifier).drainAckQueue();
       ref.read(notificationServiceProvider).consumeNativePendingAck();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       ticker.pause();
+      // Stop polling while backgrounded so it doesn't burn battery/data (or
+      // flip the offline indicator on a background network hiccup the user
+      // never sees) for however long the app sits unused.
+      ref.read(alarmsProvider.notifier).pausePoll();
     }
   }
 

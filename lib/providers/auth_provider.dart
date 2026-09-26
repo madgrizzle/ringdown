@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../services/notifications.dart';
 import '../services/prefs_store.dart';
 import '../services/secure_store.dart';
+import 'alarms_provider.dart';
 import 'settings_provider.dart';
 
 class AuthNotifier extends Notifier<AuthState> {
@@ -28,9 +29,15 @@ class AuthNotifier extends Notifier<AuthState> {
     String? refresh;
     String? lastUser;
     try {
-      token = await _secure.readAccessToken();
-      refresh = await _secure.readRefreshToken();
-      lastUser = await _secure.readUsername() ?? _prefs.readLastUsername();
+      // A hung platform channel call here (e.g. iOS Keychain access before
+      // the device's first unlock after a reboot) used to leave the app on
+      // the splash screen forever, with status stuck at AuthStatus.unknown
+      // and no way for the user to get out of it.
+      const readTimeout = Duration(seconds: 8);
+      token = await _secure.readAccessToken().timeout(readTimeout);
+      refresh = await _secure.readRefreshToken().timeout(readTimeout);
+      lastUser = (await _secure.readUsername().timeout(readTimeout)) ??
+          _prefs.readLastUsername();
     } catch (e) {
       state = const AuthState(
         status: AuthStatus.needsLogin,
@@ -120,6 +127,12 @@ class AuthNotifier extends Notifier<AuthState> {
       } catch (_) {}
     }
     await _secure.clearSession();
+    // Any acks still sitting in the offline queue belong to this session's
+    // technician and must not flush under whoever logs in next on this
+    // device (see AckQueue.setOwner).
+    try {
+      await ref.read(ackQueueProvider).clear();
+    } catch (_) {}
     state = AuthState(
       status: AuthStatus.needsLogin,
       serverUrl: ApiClient.defaultBaseUrl,

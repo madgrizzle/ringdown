@@ -15,8 +15,15 @@ class AlarmCycleGroup {
   bool get repeats => cycles.length > 1;
 }
 
-/// Same site, device, and description, ignoring case and extra spaces.
+/// The server's own correlation_key when it sent one (its dedup logic is the
+/// source of truth); otherwise fall back to site+device+description, ignoring
+/// case and extra spaces. A missing/blank correlation_key on older cached
+/// data falls back cleanly instead of grouping everything together.
 String conditionKey(Alarm alarm) {
+  final serverKey = alarm.correlationKey?.trim();
+  if (serverKey != null && serverKey.isNotEmpty) {
+    return serverKey.toLowerCase();
+  }
   String norm(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
   return '${norm(alarm.siteId)}|${norm(alarm.device)}|${norm(alarm.description)}';
@@ -87,10 +94,10 @@ String cycleIntervalLabel(Alarm alarm, DateTime now) {
   final start = alarm.receivedAt.toLocal();
   final end = (alarm.isActive ? null : alarm.clearedAt)?.toLocal();
   if (end == null) return 'In alarm since ${_stamp(start, now)}';
-  final minutes = end.difference(start).inSeconds;
-  final length = minutes < 60
+  final seconds = end.difference(start).inSeconds;
+  final length = seconds < 60
       ? '${end.difference(start).inSeconds}s'
-      : minutes < 3600
+      : seconds < 3600
           ? '${end.difference(start).inMinutes}m'
           : '${end.difference(start).inHours}h ${end.difference(start).inMinutes.remainder(60)}m';
   return '${_stamp(start, now)} – ${_stamp(end, now)} · $length';

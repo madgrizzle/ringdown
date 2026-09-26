@@ -18,6 +18,7 @@ class Alarm {
     this.rawBody,
     this.recipientEmail,
     this.messageId,
+    this.correlationKey,
   });
 
   final int id;
@@ -45,7 +46,16 @@ class Alarm {
   final String? recipientEmail;
   final String? messageId;
 
-  bool get isActive => state == 'active' || status == 'Y';
+  /// The server's own dedup/grouping key for this alarm condition, when it
+  /// sends one. Prefer this over reconstructing a key client-side.
+  final String? correlationKey;
+
+  /// `state` is always populated in [fromJson] (defaulted from `status` when
+  /// the server omits it), so it alone is authoritative. Do not OR it with
+  /// `status`: the two can legitimately disagree (e.g. a suppressed/
+  /// maintenance-cleared row that Telenium hasn't re-polled to `N` yet), and
+  /// `state` is the field the gateway means to be the source of truth.
+  bool get isActive => state == 'active';
   bool get isCleared => !isActive;
 
   /// Server currently accepts ACK only on in-alarm (Y) rows.
@@ -70,7 +80,7 @@ class Alarm {
       description: json['description'] as String? ?? '',
       status: status,
       state: state,
-      priority: json['priority'] as int? ?? 20,
+      priority: _parsePriority(json['priority']),
       aid: json['aid'] as String?,
       alarmAt: parseUtc(json['alarm_at']),
       receivedAt: parseUtc(json['received_at']),
@@ -82,7 +92,17 @@ class Alarm {
       rawBody: json['raw_body'] as String?,
       recipientEmail: json['recipient_email'] as String?,
       messageId: json['message_id'] as String?,
+      correlationKey: json['correlation_key'] as String?,
     );
+  }
+
+  /// Tolerates a blank string (not just a missing/null value) so one bad row
+  /// can't fail `int.parse`/cast and take down parsing of the whole page.
+  static int _parsePriority(dynamic value) {
+    if (value == null) return 20;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 20;
   }
 
   Map<String, dynamic> toJson() => {
@@ -104,6 +124,7 @@ class Alarm {
         'raw_body': rawBody,
         'recipient_email': recipientEmail,
         'message_id': messageId,
+        'correlation_key': correlationKey,
       };
 
   Alarm copyWith({
@@ -132,6 +153,7 @@ class Alarm {
       rawBody: rawBody,
       recipientEmail: recipientEmail,
       messageId: messageId,
+      correlationKey: correlationKey,
     );
   }
 

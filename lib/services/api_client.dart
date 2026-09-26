@@ -49,8 +49,21 @@ class ApiClient {
           final skip = e.requestOptions.extra['skipAuth'] == true ||
               e.requestOptions.extra['skipRefresh'] == true;
           if (e.response?.statusCode == 401 && !skip) {
+            // Only a failure of the refresh itself means the session is
+            // actually invalid. A retry that fails for an unrelated reason
+            // (a transient 500, a timeout) must not be treated as an auth
+            // failure -- that used to force-logout the user over a single
+            // flaky request right after a perfectly valid token refresh,
+            // and it forwarded the original 401 rather than the retry's
+            // real error.
             try {
               await _refreshSession();
+            } catch (_) {
+              onUnauthorized();
+              handler.next(e);
+              return;
+            }
+            try {
               final req = e.requestOptions;
               req.extra['skipRefresh'] = true;
               final t = token();
@@ -60,8 +73,12 @@ class ApiClient {
               final res = await _dio.fetch(req);
               handler.resolve(res);
               return;
+            } on DioException catch (retryError) {
+              handler.next(retryError);
+              return;
             } catch (_) {
-              onUnauthorized();
+              handler.next(e);
+              return;
             }
           }
           handler.next(e);
@@ -233,8 +250,8 @@ class ApiClient {
       query['state'] = 'all';
     }
     if (filters.unackedOnly) query['acked'] = false;
-    if (filters.siteContains.trim().isNotEmpty) {
-      query['site_id'] = filters.siteContains.trim();
+    if (filters.sites.isNotEmpty) {
+      query['site_id'] = filters.sites.join(',');
     }
     if (filters.deviceContains.trim().isNotEmpty) {
       query['device'] = filters.deviceContains.trim();

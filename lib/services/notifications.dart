@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,6 +13,7 @@ import '../acknowledgements.dart';
 import '../priority_category.dart';
 import 'ack_queue.dart';
 import 'api_client.dart';
+import 'secure_store.dart';
 
 const nmsAlarmsChannelId = 'nms_alarms';
 const nmsAlarmCategory = 'NMS_ALARM';
@@ -30,6 +31,13 @@ typedef SummaryTapCallback = void Function();
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // This handler runs in its own background isolate, which does not share
+  // the main isolate's Flutter engine setup. Every plugin call below goes
+  // over a platform channel (secure storage, local notifications), and
+  // those channels are not wired up until the binding is initialized --
+  // without this, calls here can silently fail or throw on a fresh
+  // isolate/plugin-registration race.
+  WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();
   } catch (_) {}
@@ -63,9 +71,17 @@ Future<void> ackFromBackground(
   bool onlyQueueWhenOffline = false,
 }) async {
   try {
-    const storage = FlutterSecureStorage();
-    var access = await storage.read(key: 'access_token');
-    var refresh = await storage.read(key: 'refresh_token');
+    // Must use the exact same platform options as SecureStore -- a
+    // background isolate building its own FlutterSecureStorage with the
+    // library defaults reads back null for tokens SecureStore wrote (see
+    // the comment on SecureStore.androidOptions), which used to make every
+    // background ack think the user wasn't logged in.
+    const storage = FlutterSecureStorage(
+      aOptions: SecureStore.androidOptions,
+      iOptions: SecureStore.iosOptions,
+    );
+    var access = await storage.read(key: SecureStore.accessTokenKey);
+    var refresh = await storage.read(key: SecureStore.refreshTokenKey);
     if ((access == null || access.isEmpty) &&
         (refresh == null || refresh.isEmpty)) {
       await _enqueue(alarmId);
@@ -78,8 +94,9 @@ Future<void> ackFromBackground(
       onTokens: (newAccess, newRefresh) async {
         access = newAccess;
         refresh = newRefresh;
-        await storage.write(key: 'access_token', value: newAccess);
-        await storage.write(key: 'refresh_token', value: newRefresh);
+        await storage.write(key: SecureStore.accessTokenKey, value: newAccess);
+        await storage.write(
+            key: SecureStore.refreshTokenKey, value: newRefresh);
       },
       onUnauthorized: () {},
     );
@@ -134,6 +151,7 @@ class NotificationService {
   bool firebaseReady = false;
   bool _initialized = false;
   final Completer<void> _ready = Completer<void>();
+  NotificationResponse? _pendingLaunchResponse;
 
   Future<void> get ready => _ready.future;
 
@@ -164,6 +182,22 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onResponse,
       onDidReceiveBackgroundNotificationResponse: onBackgroundNotificationResponse,
     );
+
+    // A data-only FCM message shown as a local notification does not run
+    // through onDidReceiveNotificationResponse when it's the notification
+    // that (re)launches a previously-terminated app -- that tap only comes
+    // back through getNotificationAppLaunchDetails, and only once, so it's
+    // cached here and replayed by consumePendingLaunchNotification() once
+    // onTap/onAck/onSummary are wired up (they aren't set yet at this
+    // point in app startup).
+    try {
+      final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        _pendingLaunchResponse = launchDetails!.notificationResponse;
+      }
+    } catch (e) {
+      debugPrint('getNotificationAppLaunchDetails failed: $e');
+    }
 
     await ensureAlarmChannel();
 
@@ -247,6 +281,16 @@ class NotificationService {
     } else {
       onTap?.call(id);
     }
+  }
+
+  /// Replays a cold-start notification tap cached by init(), once the
+  /// caller has finished wiring up onTap/onAck/onSummary. Safe to call
+  /// even when there was no such launch (a no-op).
+  void consumePendingLaunchNotification() {
+    final response = _pendingLaunchResponse;
+    if (response == null) return;
+    _pendingLaunchResponse = null;
+    _onResponse(response);
   }
 
   Future<void> consumeNativePendingAck() async {

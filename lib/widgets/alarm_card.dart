@@ -56,6 +56,20 @@ class AlarmCard extends StatelessWidget {
     return RingdownColors.cleared;
   }
 
+  /// Shape carries the same urgency signal as [_stripe], so a colorblind
+  /// user (red/green confusion is the most common kind) isn't reading
+  /// urgency off color alone.
+  IconData get _stripeIcon {
+    if (hidden) return Icons.visibility_off;
+    if (!kShowAcknowledgements) {
+      return alarm.isActive ? Icons.error : Icons.check_circle;
+    }
+    if (alarm.isActive && !alarm.acked) return Icons.error;
+    if (alarm.isActive && alarm.acked) return Icons.pending;
+    if (alarm.isCleared && !alarm.acked) return Icons.report_problem;
+    return Icons.check_circle;
+  }
+
   @override
   Widget build(BuildContext context) {
     final muted = alarm.isCleared || hidden;
@@ -87,12 +101,23 @@ class AlarmCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        alarm.siteId,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.2,
+                      Row(
+                        children: [
+                          Icon(_stripeIcon, size: 16, color: _stripe),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              alarm.siteId,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.2,
+                                  ),
                             ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(

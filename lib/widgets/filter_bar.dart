@@ -43,6 +43,16 @@ class FilterBar extends StatelessWidget {
             onSelected: (v) => onChanged(filters.copyWith(showHidden: v)),
           ),
           const SizedBox(width: 8),
+          ActionChip(
+            label: Text(
+              filters.sites.isEmpty
+                  ? 'Sites: All'
+                  : 'Sites: ${filters.sites.length}',
+            ),
+            avatar: const Icon(Icons.location_on_outlined, size: 18),
+            onPressed: onOpenSheet,
+          ),
+          const SizedBox(width: 8),
           _MenuChip<PriorityFloor>(
             label: 'Priority: ${filters.priorityFloor.label}',
             values: PriorityFloor.values,
@@ -111,6 +121,7 @@ class _MenuChip<T> extends StatelessWidget {
 Future<AlarmFilters?> showFilterSheet({
   required BuildContext context,
   required AlarmFilters current,
+  List<String> availableSites = const [],
 }) {
   return showModalBottomSheet<AlarmFilters>(
     context: context,
@@ -118,7 +129,6 @@ Future<AlarmFilters?> showFilterSheet({
     showDragHandle: true,
     builder: (context) {
       var draft = current;
-      final site = TextEditingController(text: current.siteContains);
       final device = TextEditingController(text: current.deviceContains);
       final search = TextEditingController(text: current.search);
       return Padding(
@@ -168,13 +178,47 @@ Future<AlarmFilters?> showFilterSheet({
                   },
                 ),
                 const SizedBox(height: 12),
-                TextField(
-                  controller: site,
-                  decoration: const InputDecoration(
-                    labelText: 'Site contains',
-                    border: OutlineInputBorder(),
+                if (availableSites.isNotEmpty) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Sites',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      for (final site in availableSites)
+                        FilterChip(
+                          label: Text(site),
+                          selected: draft.sites.contains(site),
+                          onSelected: (selected) => setState(() {
+                            final next = {...draft.sites};
+                            if (selected) {
+                              next.add(site);
+                            } else {
+                              next.remove(site);
+                            }
+                            draft = draft.copyWith(sites: next);
+                          }),
+                        ),
+                    ],
+                  ),
+                  if (draft.sites.isNotEmpty)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton(
+                        onPressed: () => setState(() {
+                          draft = draft.copyWith(sites: const {});
+                        }),
+                        child: const Text('Clear sites'),
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                ],
                 const SizedBox(height: 12),
                 TextField(
                   controller: device,
@@ -218,7 +262,6 @@ Future<AlarmFilters?> showFilterSheet({
                       context,
                       draft.copyWith(
                         search: search.text,
-                        siteContains: site.text,
                         deviceContains: device.text,
                       ),
                     );
