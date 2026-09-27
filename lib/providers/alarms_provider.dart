@@ -550,17 +550,35 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     }
   }
 
+  /// Upserts one freshly-fetched alarm (e.g. from opening its detail screen).
+  ///
+  /// `/alarms/:id` is nested under `/alarms` in the router, so a cold start
+  /// straight into an alarm's detail (a tapped notification) mounts the list
+  /// screen and the detail screen together: both kick off async work in
+  /// initState, and the detail screen's single-alarm fetch can easily win
+  /// the race against the list screen's own (larger, paginated) refresh().
+  /// If this method trusted `state.items` alone at that point, it would
+  /// still be the empty starting state, and persisting it would silently
+  /// truncate the phone's saved alarm history down to just this one alarm --
+  /// which a later *delta* sync can never repair, since a delta sync only
+  /// asks the server for what changed and assumes the phone already holds
+  /// everything else. Merging against what's actually on disk first means
+  /// this can only add to the saved history, never shrink it.
   void _upsert(Alarm alarm) {
-    final idx = state.items.indexWhere((a) => a.id == alarm.id);
+    final owner = _owner;
+    final onDisk = owner == null
+        ? const <Alarm>[]
+        : (_cache.loadFor(owner)?.items ?? const <Alarm>[]);
+    final base = mergeAlarms(onDisk, state.items);
+    final idx = base.indexWhere((a) => a.id == alarm.id);
     final List<Alarm> next;
     if (idx == -1) {
-      next = [alarm, ...state.items];
+      next = [alarm, ...base];
     } else {
-      next = [...state.items];
+      next = [...base];
       next[idx] = alarm;
     }
     state = state.copyWith(items: next, total: next.length);
-    final owner = _owner;
     if (owner != null) {
       unawaited(_cache.saveFor(owner, next));
     }
