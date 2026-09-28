@@ -28,6 +28,31 @@ class CategoryChip extends StatelessWidget {
   }
 }
 
+/// Shown alongside [CategoryChip] when the raw alarm email mentions
+/// "escalated" -- a separate, text-driven signal from the priority band.
+class EscalationChip extends StatelessWidget {
+  const EscalationChip({super.key, required this.alarm});
+
+  final Alarm alarm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      label: const Text('Escalated'),
+      labelStyle: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+      ),
+      color: const WidgetStatePropertyAll(RingdownColors.escalatedTag),
+      backgroundColor: RingdownColors.escalatedTag,
+      side: const BorderSide(color: RingdownColors.escalatedTag),
+    );
+  }
+}
+
 class StatusChip extends StatelessWidget {
   const StatusChip({super.key, required this.alarm});
 

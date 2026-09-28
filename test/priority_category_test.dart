@@ -16,13 +16,13 @@ void main() {
     expect(colorFromHex('#00ACC1'), const Color(0xFF00ACC1));
   });
 
-  test('every band, both edges: 1-10 Critical, 11-20 Major, 21-30 Escalated, '
+  test('every band, both edges: 1-10 Critical, 11-20 Major, 21-30 Elevated, '
       '31-40 Minor, 41-50 Warning, 51-60 General, 61-70 Information, '
       '71-89 Other, 90-99 System', () {
     const bands = <(int, int, String)>[
       (1, 10, 'Critical'),
       (11, 20, 'Major'),
-      (21, 30, 'Escalated'),
+      (21, 30, 'Elevated'),
       (31, 40, 'Minor'),
       (41, 50, 'Warning'),
       (51, 60, 'General'),
@@ -42,8 +42,8 @@ void main() {
       () {
     const boundaries = <(int, String, int, String)>[
       (10, 'Critical', 11, 'Major'),
-      (20, 'Major', 21, 'Escalated'),
-      (30, 'Escalated', 31, 'Minor'),
+      (20, 'Major', 21, 'Elevated'),
+      (30, 'Elevated', 31, 'Minor'),
       (40, 'Minor', 41, 'Warning'),
       (50, 'Warning', 51, 'General'),
       (60, 'General', 61, 'Information'),
@@ -83,8 +83,8 @@ void main() {
 
   test('priority floor: every band boundary is respected by its own floor',
       () {
-    expect(PriorityFloor.escalated.allows(30), isTrue);
-    expect(PriorityFloor.escalated.allows(31), isFalse);
+    expect(PriorityFloor.elevated.allows(30), isTrue);
+    expect(PriorityFloor.elevated.allows(31), isFalse);
     expect(PriorityFloor.minor.allows(40), isTrue);
     expect(PriorityFloor.minor.allows(41), isFalse);
     expect(PriorityFloor.general.allows(60), isTrue);

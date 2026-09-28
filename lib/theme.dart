@@ -6,6 +6,9 @@ class RingdownColors {
   static const activeAcked = Color(0xFFFB8C00);
   static const cleared = Color(0xFF66BB6A);
   static const unackedAmber = Color(0xFFFFC107);
+  /// The "Escalated" text-tag (an alarm whose raw email mentions escalation),
+  /// distinct from the lighter green used for the CLEARED status chip.
+  static const escalatedTag = Color(0xFF2E7D32);
   static const darkBg = Color(0xFF0E0E0E);
   static const darkSurface = Color(0xFF161616);
   static const darkCard = Color(0xFF1C1C1C);

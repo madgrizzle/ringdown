@@ -140,6 +140,8 @@ class AlarmCard extends StatelessWidget {
                         runSpacing: 4,
                         children: [
                           CategoryChip(alarm: alarm),
+                          if (alarm.mentionsEscalation)
+                            EscalationChip(alarm: alarm),
                           StatusChip(alarm: alarm),
                           if (kShowAcknowledgements) AckChip(alarm: alarm),
                           if (hidden)

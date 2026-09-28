@@ -83,4 +83,46 @@ void main() {
     expect(withKey.correlationKey, 'SITE|RTU|temp');
     expect(Alarm.fromJson(withKey.toJson()).correlationKey, 'SITE|RTU|temp');
   });
+
+  group('mentionsEscalation is text-driven, independent of priority', () {
+    test('subject contains "escalated" (case-insensitive)', () {
+      final alarm = Alarm.fromJson({
+        ..._json(),
+        'raw_subject': 'Telenium - SITE - Escalated to Tier 2',
+      });
+      expect(alarm.mentionsEscalation, isTrue);
+    });
+
+    test('body contains "escalated" even when subject does not', () {
+      final alarm = Alarm.fromJson({
+        ..._json(),
+        'raw_subject': 'Telenium - SITE - UPS Battery Bad',
+        'raw_body': 'This alarm has been ESCALATED to on-call.',
+      });
+      expect(alarm.mentionsEscalation, isTrue);
+    });
+
+    test('neither subject nor body mentions escalation', () {
+      final alarm = Alarm.fromJson({
+        ..._json(),
+        'raw_subject': 'Telenium - SITE - UPS Battery Bad',
+        'raw_body': 'Routine alarm, no action needed.',
+      });
+      expect(alarm.mentionsEscalation, isFalse);
+    });
+
+    test('missing raw_subject/raw_body does not throw', () {
+      expect(Alarm.fromJson(_json()).mentionsEscalation, isFalse);
+    });
+
+    test('is independent of the Elevated priority band', () {
+      // Priority 25 falls in the 21-30 "Elevated" band, but that alone
+      // must not trip the text-driven Escalated tag.
+      final alarm = Alarm.fromJson({
+        ..._json(priority: 25),
+        'raw_subject': 'Telenium - SITE - UPS Battery Bad',
+      });
+      expect(alarm.mentionsEscalation, isFalse);
+    });
+  });
 }
