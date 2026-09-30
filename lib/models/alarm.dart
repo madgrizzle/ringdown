@@ -61,15 +61,15 @@ class Alarm {
   /// Server currently accepts ACK only on in-alarm (Y) rows.
   bool get canAck => !acked && status == 'Y';
 
-  /// True when the raw alarm email mentions "escalated" -- independent of
+  /// True when the raw alarm email mentions "escalation" -- independent of
   /// the Telenium priority band (priorities 21-30, labelled "Elevated" in
   /// this app). This is a separate, text-driven tag: whatever Telenium
   /// literally wrote in the subject or body, not a priority range.
   bool get mentionsEscalation {
     final subject = rawSubject?.toLowerCase() ?? '';
-    if (subject.contains('escalated')) return true;
+    if (subject.contains('escalation')) return true;
     final body = rawBody?.toLowerCase() ?? '';
-    return body.contains('escalated');
+    return body.contains('escalation');
   }
 
   /// Latest receive, clear, or acknowledge time. Matches the server sync order.

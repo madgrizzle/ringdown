@@ -85,19 +85,19 @@ void main() {
   });
 
   group('mentionsEscalation is text-driven, independent of priority', () {
-    test('subject contains "escalated" (case-insensitive)', () {
+    test('subject contains "escalation" (case-insensitive)', () {
       final alarm = Alarm.fromJson({
         ..._json(),
-        'raw_subject': 'Telenium - SITE - Escalated to Tier 2',
+        'raw_subject': 'Telenium - SITE - Flagged for Escalation',
       });
       expect(alarm.mentionsEscalation, isTrue);
     });
 
-    test('body contains "escalated" even when subject does not', () {
+    test('body contains "escalation" even when subject does not', () {
       final alarm = Alarm.fromJson({
         ..._json(),
         'raw_subject': 'Telenium - SITE - UPS Battery Bad',
-        'raw_body': 'This alarm has been ESCALATED to on-call.',
+        'raw_body': 'This alarm has been flagged for ESCALATION to on-call.',
       });
       expect(alarm.mentionsEscalation, isTrue);
     });
