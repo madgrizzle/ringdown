@@ -220,6 +220,40 @@ class AlarmsNotifier extends Notifier<AlarmsState> {
     await refresh(forceLookback: expanded);
   }
 
+  /// Wipes everything cached on this phone and re-downloads the current
+  /// history window fresh from the server. Returns false (and restores what
+  /// was on screen) if the resync couldn't reach the server, so a technician
+  /// who taps this without connectivity doesn't just end up with a blank list.
+  ///
+  /// This is stronger than [historyWindowChanged]/`refresh(forceLookback:
+  /// true)`: that path *merges* a full lookback fetch on top of whatever is
+  /// already cached, so a stale or corrupted local entry the server no
+  /// longer reports can linger indefinitely. Clearing the cache first means
+  /// the result is exactly what the server has, not a merge onto old data.
+  Future<bool> fullResync() async {
+    final owner = _owner;
+    final previousItems = state.items;
+    final previousTotal = state.total;
+    state = state.copyWith(
+      items: const [],
+      total: 0,
+      loading: true,
+      clearError: true,
+    );
+    if (owner != null) {
+      await _cache.clear();
+    }
+    await refresh(forceLookback: true);
+    if (state.offline && state.items.isEmpty && previousItems.isNotEmpty) {
+      state = state.copyWith(items: previousItems, total: previousTotal);
+      if (owner != null) {
+        await _cache.saveFor(owner, previousItems);
+      }
+      return false;
+    }
+    return true;
+  }
+
   /// Pulls every page of the cursor. [complete] is false when a page was left unread,
   /// so the caller keeps the old cursor and the next refresh asks again.
   Future<({List<Alarm> alarms, DateTime? cursor, bool complete})> _sync(

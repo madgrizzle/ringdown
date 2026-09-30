@@ -21,6 +21,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   String _version = '';
   double? _historyDrag;
+  bool _resyncing = false;
 
   @override
   void initState() {
@@ -121,6 +122,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   );
             },
           ),
+          ListTile(
+            title: const Text('Full resync'),
+            subtitle: const Text(
+              'Delete every alarm cached on this phone and re-download the '
+              'current history window from the server. Use this if alarms '
+              'look wrong or missing. Requires a network connection.',
+            ),
+            isThreeLine: true,
+            leading: _resyncing
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.sync_problem),
+            enabled: !_resyncing,
+            onTap: _resyncing ? null : _confirmFullResync,
+          ),
           if (kShowAcknowledgements)
             SwitchListTile(
               title: const Text('Unacked only by default'),
@@ -200,6 +219,44 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _confirmFullResync() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Full resync?'),
+        content: const Text(
+          'This deletes every alarm cached on this phone and re-downloads '
+          'the current history window from the server. Requires a network '
+          'connection.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Resync'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _resyncing = true);
+    final ok = await ref.read(alarmsProvider.notifier).fullResync();
+    if (!mounted) return;
+    setState(() => _resyncing = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? 'Resync complete'
+              : 'Resync failed — no connection. Your previous alarms were kept.',
+        ),
       ),
     );
   }
