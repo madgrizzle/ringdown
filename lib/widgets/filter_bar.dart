@@ -126,153 +126,178 @@ Future<AlarmFilters?> showFilterSheet({
   return showModalBottomSheet<AlarmFilters>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     showDragHandle: true,
-    builder: (context) {
-      var draft = current;
-      final device = TextEditingController(text: current.deviceContains);
-      final search = TextEditingController(text: current.search);
-      return Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+    builder: (context) =>
+        _FilterSheet(current: current, availableSites: availableSites),
+  );
+}
+
+/// Stateful so the draft and text fields survive the sheet's builder being
+/// re-run (e.g. when the keyboard opens and MediaQuery changes).
+class _FilterSheet extends StatefulWidget {
+  const _FilterSheet({required this.current, required this.availableSites});
+
+  final AlarmFilters current;
+  final List<String> availableSites;
+
+  @override
+  State<_FilterSheet> createState() => _FilterSheetState();
+}
+
+class _FilterSheetState extends State<_FilterSheet> {
+  late AlarmFilters _draft = widget.current;
+  late final TextEditingController _device = TextEditingController(
+    text: widget.current.deviceContains,
+  );
+  late final TextEditingController _search = TextEditingController(
+    text: widget.current.search,
+  );
+
+  @override
+  void dispose() {
+    _device.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Filter & search', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _search,
+          decoration: const InputDecoration(
+            labelText: 'Search site, device, or description',
+            border: OutlineInputBorder(),
+          ),
         ),
-        child: StatefulBuilder(
-          builder: (context, setState) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Filter & search',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: search,
-                  decoration: const InputDecoration(
-                    labelText: 'Search site, device, or description',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<PriorityFloor>(
-                  initialValue: draft.priorityFloor,
-                  decoration: const InputDecoration(
-                    labelText: 'Minimum priority',
-                    helperText: 'Shows this category and anything more urgent',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final floor in PriorityFloor.values)
-                      DropdownMenuItem(
-                        value: floor,
-                        child: Text(floor.label),
-                      ),
-                  ],
-                  onChanged: (floor) {
-                    if (floor == null) return;
-                    setState(() {
-                      draft = draft.copyWith(priorityFloor: floor);
-                    });
-                  },
-                ),
-                const SizedBox(height: 12),
-                if (availableSites.isNotEmpty) ...[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Sites',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final site in availableSites)
-                        FilterChip(
-                          label: Text(site),
-                          selected: draft.sites.contains(site),
-                          onSelected: (selected) => setState(() {
-                            final next = {...draft.sites};
-                            if (selected) {
-                              next.add(site);
-                            } else {
-                              next.remove(site);
-                            }
-                            draft = draft.copyWith(sites: next);
-                          }),
-                        ),
-                    ],
-                  ),
-                  if (draft.sites.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: () => setState(() {
-                          draft = draft.copyWith(sites: const {});
-                        }),
-                        child: const Text('Clear sites'),
-                      ),
-                    ),
-                  const SizedBox(height: 4),
-                ],
-                const SizedBox(height: 12),
-                TextField(
-                  controller: device,
-                  decoration: const InputDecoration(
-                    labelText: 'Device contains',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Hide cleared'),
-                  value: draft.hideCleared,
-                  onChanged: (v) => setState(() {
-                    draft = draft.copyWith(hideCleared: v);
-                  }),
-                ),
-                if (kShowAcknowledgements)
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Unacked only'),
-                    value: draft.unackedOnly,
-                    onChanged: (v) => setState(() {
-                      draft = draft.copyWith(unackedOnly: v);
-                    }),
-                  ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Show hidden'),
-                  subtitle: kShowAcknowledgements
-                      ? const Text('Alarms you hid still stay acknowledged')
-                      : null,
-                  value: draft.showHidden,
-                  onChanged: (v) => setState(() {
-                    draft = draft.copyWith(showHidden: v);
-                  }),
-                ),
-                const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: () {
-                    Navigator.pop(
-                      context,
-                      draft.copyWith(
-                        search: search.text,
-                        deviceContains: device.text,
-                      ),
-                    );
-                  },
-                  child: const Text('Apply'),
-                ),
-              ],
-            );
+        const SizedBox(height: 12),
+        DropdownButtonFormField<PriorityFloor>(
+          initialValue: _draft.priorityFloor,
+          decoration: const InputDecoration(
+            labelText: 'Minimum priority',
+            helperText: 'Shows this category and anything more urgent',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final floor in PriorityFloor.values)
+              DropdownMenuItem(value: floor, child: Text(floor.label)),
+          ],
+          onChanged: (floor) {
+            if (floor == null) return;
+            setState(() {
+              _draft = _draft.copyWith(priorityFloor: floor);
+            });
           },
         ),
-      );
-    },
-  );
+        const SizedBox(height: 12),
+        if (widget.availableSites.isNotEmpty) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Sites', style: Theme.of(context).textTheme.labelLarge),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final site in widget.availableSites)
+                FilterChip(
+                  label: Text(site),
+                  selected: _draft.sites.contains(site),
+                  onSelected: (selected) => setState(() {
+                    final next = {..._draft.sites};
+                    if (selected) {
+                      next.add(site);
+                    } else {
+                      next.remove(site);
+                    }
+                    _draft = _draft.copyWith(sites: next);
+                  }),
+                ),
+            ],
+          ),
+          if (_draft.sites.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => setState(() {
+                  _draft = _draft.copyWith(sites: const {});
+                }),
+                child: const Text('Clear sites'),
+              ),
+            ),
+          const SizedBox(height: 4),
+        ],
+        const SizedBox(height: 12),
+        TextField(
+          controller: _device,
+          decoration: const InputDecoration(
+            labelText: 'Device contains',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Hide cleared'),
+          value: _draft.hideCleared,
+          onChanged: (v) => setState(() {
+            _draft = _draft.copyWith(hideCleared: v);
+          }),
+        ),
+        if (kShowAcknowledgements)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Unacked only'),
+            value: _draft.unackedOnly,
+            onChanged: (v) => setState(() {
+              _draft = _draft.copyWith(unackedOnly: v);
+            }),
+          ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Show hidden'),
+          subtitle: kShowAcknowledgements
+              ? const Text('Alarms you hid still stay acknowledged')
+              : null,
+          value: _draft.showHidden,
+          onChanged: (v) => setState(() {
+            _draft = _draft.copyWith(showHidden: v);
+          }),
+        ),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(
+              context,
+              _draft.copyWith(
+                search: _search.text,
+                deviceContains: _device.text,
+              ),
+            );
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+    // Scrolls when the content (long site lists, open keyboard) is taller
+    // than the sheet; bottom padding keeps Apply clear of the keyboard and
+    // the Android navigation bar.
+    return SingleChildScrollView(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom:
+            MediaQuery.viewInsetsOf(context).bottom +
+            MediaQuery.paddingOf(context).bottom +
+            16,
+      ),
+      child: content,
+    );
+  }
 }
