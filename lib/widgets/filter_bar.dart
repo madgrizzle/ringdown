@@ -286,16 +286,12 @@ class _FilterSheetState extends State<_FilterSheet> {
       ],
     );
     // Scrolls when the content (long site lists, open keyboard) is taller
-    // than the sheet; bottom padding keeps Apply clear of the keyboard and
-    // the Android navigation bar.
+    // than the sheet; bottom padding keeps Apply clear of the keyboard.
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         left: 16,
         right: 16,
-        bottom:
-            MediaQuery.viewInsetsOf(context).bottom +
-            MediaQuery.paddingOf(context).bottom +
-            16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
       ),
       child: content,
     );

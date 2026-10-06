@@ -350,10 +350,6 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       );
     }
 
-    // Keep the last card above the Android navigation bar / iOS home
-    // indicator (the bulk bar's SafeArea covers it while selecting).
-    final bottomInset =
-        alarms.selecting ? 0.0 : MediaQuery.paddingOf(context).bottom;
     final cycleItems = filters.hideCleared
         ? ref.read(alarmsProvider.notifier).visibleItems(includeCleared: true)
         : items;
@@ -365,7 +361,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
       return ListView.separated(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(12, 0, 12, 24 + bottomInset),
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
         itemCount: cycles.length + (alarms.loadingMore ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, i) {
@@ -391,7 +387,7 @@ class _AlarmListScreenState extends ConsumerState<AlarmListScreen> {
     return ListView.builder(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(12, 0, 12, 24 + bottomInset),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
       itemCount: keys.length,
       itemBuilder: (context, gi) {
         final key = keys[gi];

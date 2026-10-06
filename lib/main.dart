@@ -127,6 +127,13 @@ class _RingdownAppState extends ConsumerState<RingdownApp>
       darkTheme: ringdownTheme(Brightness.dark),
       themeMode: themeMode,
       routerConfig: router,
+      // Keep every screen, sheet and dialog out of the Android navigation
+      // bar (and iOS home indicator / side cutouts). Android 15+ forces
+      // edge-to-edge, so without this content draws underneath the bar.
+      builder: (context, child) => ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: SafeArea(top: false, child: child!),
+      ),
       debugShowCheckedModeBanner: false,
     );
   }

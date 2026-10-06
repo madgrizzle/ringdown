@@ -211,12 +211,7 @@ class _AlarmDetailScreenState extends ConsumerState<AlarmDetailScreen> {
       clearedFreezeAt: freeze,
     );
     return ListView(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        12,
-        16,
-        32 + MediaQuery.paddingOf(context).bottom,
-      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
         Text(
           alarm.siteId,
